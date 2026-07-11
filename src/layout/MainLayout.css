@@ -1,0 +1,21 @@
+.layout-container {
+    display: flex;
+    min-height: 100vh;
+    background-color: #f8fafc; /* Fond clair pour la zone de travail */
+}
+
+.main-content {
+    margin-left: 260px; /* Aligné sur la largeur de la SideBar */
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    color: #333333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.main-content > * {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
