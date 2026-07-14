@@ -9,13 +9,13 @@ interface SidebarProps {
   active: string;
   onChange: (key: string) => void;
 }
-
+import './Sidebar.css';
 export default function Sidebar({ items, active, onChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
         <span className="dot" />
-        Admin
+        <span className="logo-text">Admin</span>
       </div>
       {items.map((item) => {
         const Icon = item.icon;
@@ -24,9 +24,10 @@ export default function Sidebar({ items, active, onChange }: SidebarProps) {
             key={item.key}
             className={`nav-item ${active === item.key ? "active" : ""}`}
             onClick={() => onChange(item.key)}
+            aria-label={item.label}
           >
             <Icon size={16} />
-            {item.label}
+            <span className="nav-label">{item.label}</span>
           </button>
         );
       })}

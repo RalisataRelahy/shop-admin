@@ -19,3 +19,18 @@
     max-width: 100%;
     box-sizing: border-box;
 }
+
+/* Tablette : sidebar réduite (si tu appliques le mode icônes seules) */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .main-content {
+        margin-left: 72px;
+    }
+}
+
+/* Mobile : sidebar devient un drawer caché, plus de marge réservée */
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+        padding-top: 64px; /* Laisse la place au bouton burger fixe */
+    }
+}
