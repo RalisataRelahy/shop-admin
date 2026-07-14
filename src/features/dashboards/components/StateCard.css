@@ -1,0 +1,112 @@
+:root {
+  --pg-bg: #fdfbf7;
+  --pg-surface: #ffffff;
+  --pg-border: #e8e2d3;
+  --pg-text: #1e2a1b;
+  --pg-text-muted: #71786c;
+  --pg-primary: #19a41c;
+  --pg-primary-dark: #229320;
+  --pg-amber: #c98a1f;
+  --pg-radius-md: 14px;
+  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(25, 164, 28, 0.06);
+  --pg-shadow-hover: 0 10px 26px rgba(25, 164, 28, 0.1);
+}
+
+.stat-card {
+  position: relative;
+  background: var(--pg-surface);
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius-md);
+  padding: 20px 20px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  box-shadow: var(--pg-shadow-soft);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--pg-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.stat-card-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--pg-primary);
+}
+
+.stat-card--green .stat-card-accent {
+  background: var(--pg-primary);
+}
+
+.stat-card--amber .stat-card-accent {
+  background: var(--pg-amber);
+}
+
+.stat-card--neutral .stat-card-accent {
+  background: var(--pg-border);
+}
+
+.stat-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pg-text-muted);
+  margin: 0;
+}
+
+.stat-card-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--pg-text);
+  letter-spacing: -0.01em;
+}
+
+/* Skeleton (état de chargement) */
+.stat-card.is-skeleton .stat-card-title,
+.stat-card.is-skeleton .stat-card-value {
+  color: transparent;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--pg-border) 25%,
+    #f1ede1 37%,
+    var(--pg-border) 63%
+  );
+  background-size: 400% 100%;
+  animation: pg-shimmer 1.4s ease infinite;
+}
+
+.stat-card.is-skeleton .stat-card-title {
+  width: 60%;
+  height: 12px;
+}
+
+.stat-card.is-skeleton .stat-card-value {
+  width: 45%;
+  height: 24px;
+}
+
+@keyframes pg-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card,
+  .stat-card.is-skeleton .stat-card-title,
+  .stat-card.is-skeleton .stat-card-value {
+    transition: none;
+    animation: none;
+  }
+}

@@ -2,15 +2,24 @@ import { useEffect, useState } from "react";
 import crudService from "../data/ProductsServices";
 import { uploadProductImage } from "../../../supabase/storage";
 import "./ProductsScreen.css";
+import { supabase } from "../../../supabase/config";
+
+export interface ProductVariant {
+  id?: string | number;
+  name: string;
+  price: number;
+  display_order: number;
+  is_available: boolean;
+}
 
 export interface ProductsModel {
   id: number | string;
   name: string;
   category_id: number | string;
   description: string;
-  price: number;
   image_url: string;
   is_active: boolean;
+  product_variants: ProductVariant[];
 }
 
 interface Category {
@@ -19,19 +28,40 @@ interface Category {
   is_active: boolean;
 }
 
-const emptyForm = {
+interface VariantFormState {
+  name: string;
+  price: string;
+  display_order: number;
+}
+
+interface ProductFormState {
+  name: string;
+  category_id: string;
+  description: string;
+  image_url: string;
+  variants: VariantFormState[];
+}
+
+const emptyForm: ProductFormState = {
   name: "",
   category_id: "",
   description: "",
-  price: "",
   image_url: "",
+  variants: [
+    {
+      name: "Standard",
+      price: "",
+      display_order: 1,
+    },
+  ],
 };
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductsModel[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -40,7 +70,13 @@ export default function ProductsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const loadProducts = async () => {
-    const { data, error } = await crudService.getAll("products");
+    const { data, error } = await supabase
+      .from("products")
+      .select(`
+        *,
+        categories(name),
+        product_variants(*)
+       `);
     if (error) {
       console.error(error);
       setErrorMessage(error.message);
@@ -50,6 +86,46 @@ export default function ProductsPage() {
     setErrorMessage(null);
     setProducts(data ?? []);
     setLoading(false);
+  };
+
+  // VARIANT CRUD
+  const addVariant = () => {
+    setForm((prev) => ({
+      ...prev,
+      variants: [
+        ...prev.variants,
+        {
+          name: "",
+          price: "",
+          display_order: prev.variants.length + 1,
+        },
+      ],
+    }));
+  };
+
+  const updateVariant = (
+    index: number,
+    field: keyof VariantFormState,
+    value: string
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v, i) =>
+        i === index ? { ...v, [field]: value } : v
+      ),
+    }));
+  };
+
+  const removeVariant = (index: number) => {
+    if (form.variants.length <= 1) {
+      setErrorMessage("Un produit doit avoir au moins une variante");
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index),
+    }));
   };
 
   const loadCategories = async () => {
@@ -77,44 +153,99 @@ export default function ProductsPage() {
   };
 
   const addProduct = async () => {
-    const trimmedName = form.name.trim();
-    if (!trimmedName || !form.category_id || !form.price) return;
+    if (submitting) return; // évite les doubles clics / double soumission
 
-    try {
-      let imageUrl = form.image_url.trim();
+    if (!form.name.trim()) {
+      setErrorMessage("Le nom est obligatoire");
+      return;
+    }
 
-      if (selectedFile) {
-        setUploadingImage(true);
-        imageUrl = await uploadProductImage(selectedFile,trimmedName);
-        setUploadingImage(false);
-      }
+    if (!form.category_id) {
+      setErrorMessage("La catégorie est obligatoire");
+      return;
+    }
 
-      const { error } = await crudService.create("products", {
-        name: trimmedName,
-        category_id: form.category_id,
-        description: form.description.trim(),
-        price: Number(form.price),
-        image_url: imageUrl,
-        is_active: true,
-      });
+    if (form.variants.length === 0) {
+      setErrorMessage("Ajoutez au moins une variante");
+      return;
+    }
 
-      if (error) {
-        console.error(error);
-        setErrorMessage(error.message);
+    for (const v of form.variants) {
+      if (!v.name.trim()) {
+        setErrorMessage("Chaque variante doit avoir un nom");
         return;
       }
 
-      setErrorMessage(null);
+      if (Number(v.price) <= 0 || Number.isNaN(Number(v.price))) {
+        setErrorMessage("Le prix doit être supérieur à 0");
+        return;
+      }
+    }
+
+    setSubmitting(true);
+
+    try {
+      let imageUrl = form.image_url;
+
+      // On n'upload que si une image a été sélectionnée ET n'a pas déjà
+      // été envoyée via le bouton "Confirmer l'envoi" (sinon double upload).
+      if (selectedFile && !imageUrl) {
+        setUploadingImage(true);
+        imageUrl = await uploadProductImage(selectedFile, form.name);
+        setUploadingImage(false);
+      }
+
+      // 1 - création produit
+      const { data: product, error: productError } = await crudService.create(
+        "products",
+        {
+          name: form.name.trim(),
+          category_id: form.category_id,
+          description: form.description,
+          image_url: imageUrl,
+          is_active: true,
+        }
+      );
+
+      if (productError) throw productError;
+
+      // crudService.create peut renvoyer soit un objet, soit un tableau
+      // selon l'implémentation du service : on sécurise l'extraction de l'id.
+      const createdProduct = Array.isArray(product) ? product[0] : product;
+      if (!createdProduct?.id) {
+        throw new Error("Le produit a été créé mais son identifiant est introuvable");
+      }
+
+      // 2 - création variantes
+      const variants = form.variants.map((v) => ({
+        product_id: createdProduct.id,
+        name: v.name,
+        price: Number(v.price),
+        is_available: true,
+      }));
+
+      const { error: variantError } = await crudService.insertMany(
+        "product_variants",
+        variants
+      );
+      if (variantError) throw variantError;
+
       resetForm();
-      loadProducts();
-    } catch (err) {
-      console.error(err);
+      await loadProducts();
+    } catch (e) {
       setUploadingImage(false);
-      setErrorMessage(err instanceof Error ? err.message : "Erreur lors de l'upload de l'image");
+      setErrorMessage(`Erreur création produit: ${e} `);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const deleteProduct = async (id: number | string) => {
+  const deleteProduct = async (id: number | string, name: string) => {
+    const confirmed = window.confirm(
+      `Supprimer définitivement "${name}" ? Cette action est irréversible.`
+    );
+    if (!confirmed) return;
+
     const { error } = await crudService.delete("products", id);
     if (error) {
       console.error(error);
@@ -128,7 +259,10 @@ export default function ProductsPage() {
   const handleImageSelection = (file: File | null) => {
     if (!file) return;
 
+    // Une nouvelle sélection invalide une éventuelle image déjà confirmée.
     setSelectedFile(file);
+    setForm((prev) => ({ ...prev, image_url: "" }));
+
     const reader = new FileReader();
     reader.onload = () => {
       setPreviewImage(reader.result as string);
@@ -142,12 +276,17 @@ export default function ProductsPage() {
 
     try {
       setUploadingImage(true);
-      const publicUrl = await uploadProductImage(selectedFile);
+      const publicUrl = await uploadProductImage(selectedFile, form.name);
       setForm((prev) => ({ ...prev, image_url: publicUrl }));
+      // On vide selectedFile pour éviter un ré-upload au submit, tout en
+      // gardant l'aperçu visible (form.image_url pilote l'affichage confirmé).
+      setSelectedFile(null);
       setErrorMessage(null);
     } catch (err) {
       console.error(err);
-      setErrorMessage(err instanceof Error ? err.message : "Erreur lors de l'upload de l'image");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Erreur lors de l'upload de l'image"
+      );
     } finally {
       setUploadingImage(false);
     }
@@ -227,17 +366,45 @@ export default function ProductsPage() {
                 </select>
               </div>
 
-              <div className="prod-field">
-                <label className="prod-label">Prix</label>
-                <input
-                  className="prod-input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0Ar"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                />
+              <div className="prod-field-full">
+                <label className="prod-label">Variantes / Tailles</label>
+
+                {form.variants.map((variant, index) => (
+                  <div key={index} className="variant-row">
+                    <input
+                      className="prod-input"
+                      placeholder="Nom (MM, GM...)"
+                      value={variant.name}
+                      onChange={(e) =>
+                        updateVariant(index, "name", e.target.value)
+                      }
+                    />
+
+                    <input
+                      className="prod-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Prix"
+                      value={variant.price}
+                      onChange={(e) =>
+                        updateVariant(index, "price", e.target.value)
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      className="prod-btn-danger"
+                      onClick={() => removeVariant(index)}
+                    >
+                      X
+                    </button>
+                  </div>
+                ))}
+
+                <button type="button" className="prod-btn-ghost" onClick={addVariant}>
+                  + Ajouter une variante
+                </button>
               </div>
 
               <div className="prod-field prod-field-full">
@@ -251,28 +418,52 @@ export default function ProductsPage() {
                   onDragLeave={() => setDragActive(false)}
                   onDrop={handleDrop}
                 >
-                  <p>{uploadingImage ? "Upload en cours…" : "Glissez une image ici ou cliquez pour sélectionner"}</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => handleImageSelection(event.target.files?.[0] ?? null)}
-                  />
+                  <label className="prod-dropzone-label">
+                    <p>
+                      {uploadingImage
+                        ? "Upload en cours…"
+                        : "Glissez une image ici ou cliquez pour sélectionner"}
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="prod-dropzone-input"
+                      onChange={(event) =>
+                        handleImageSelection(event.target.files?.[0] ?? null)
+                      }
+                    />
+                  </label>
                 </div>
-                {previewImage && (
+                {previewImage && !form.image_url && (
                   <div className="prod-image-preview-card">
-                    <img src={previewImage} alt="Aperçu de l'image" className="prod-image-preview" />
+                    <img
+                      src={previewImage}
+                      alt="Aperçu de l'image"
+                      className="prod-image-preview"
+                    />
                     <div className="prod-image-preview-info">
                       <span className="prod-image-confirmed">Aperçu prêt</span>
-                      <p className="prod-uploaded-url">Cette image sera envoyée après confirmation.</p>
-                      <button type="button" className="prod-btn-primary small" onClick={handleConfirmUpload} disabled={uploadingImage}>
+                      <p className="prod-uploaded-url">
+                        Cette image sera envoyée après confirmation.
+                      </p>
+                      <button
+                        type="button"
+                        className="prod-btn-primary small"
+                        onClick={handleConfirmUpload}
+                        disabled={uploadingImage}
+                      >
                         {uploadingImage ? "Envoi en cours…" : "Confirmer l'envoi"}
                       </button>
                     </div>
                   </div>
                 )}
-                {form.image_url && !previewImage && (
+                {form.image_url && (
                   <div className="prod-image-preview-card">
-                    <img src={form.image_url} alt="Image envoyée" className="prod-image-preview" />
+                    <img
+                      src={form.image_url}
+                      alt="Image envoyée"
+                      className="prod-image-preview"
+                    />
                     <div className="prod-image-preview-info">
                       <span className="prod-image-confirmed">✓ Upload confirmé</span>
                       <p className="prod-uploaded-url">{form.image_url}</p>
@@ -295,10 +486,19 @@ export default function ProductsPage() {
             </div>
 
             <div className="prod-form-actions">
-              <button className="prod-btn-primary" onClick={addProduct}>
-                Enregistrer
+              <button
+                className="prod-btn-primary"
+                onClick={addProduct}
+                disabled={submitting}
+              >
+                {submitting ? "Enregistrement…" : "Enregistrer"}
               </button>
-              <button className="prod-btn-ghost" onClick={resetForm}>
+              <button
+                type="button"
+                className="prod-btn-ghost"
+                onClick={resetForm}
+                disabled={submitting}
+              >
                 Annuler
               </button>
             </div>
@@ -330,9 +530,13 @@ export default function ProductsPage() {
                 <div className="prod-card-body">
                   <div className="prod-card-top">
                     <h3 className="prod-card-name">{product.name}</h3>
-                    <span className="prod-card-price">
-                      {product.price.toFixed(2)} Ar
-                    </span>
+                    <div className="prod-card-price">
+                      {product.product_variants?.map((v, i) => (
+                        <div key={v.id ?? `${product.id}-${v.name}-${i}`}>
+                          {v.name} : {v.price.toLocaleString()} Ar
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <span className="prod-card-category">
                     Category : {categoryName(product.category_id)}
@@ -352,7 +556,7 @@ export default function ProductsPage() {
                   </button>
                   <button
                     className="prod-btn-danger"
-                    onClick={() => deleteProduct(product.id)}
+                    onClick={() => deleteProduct(product.id, product.name)}
                   >
                     Supprimer
                   </button>

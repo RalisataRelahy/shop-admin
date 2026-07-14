@@ -1,0 +1,175 @@
+:root {
+  --pg-bg: #fdfbf7;
+  --pg-surface: #ffffff;
+  --pg-surface-alt: #f6f2e9;
+  --pg-border: #e8e2d3;
+  --pg-text: #1e2a1b;
+  --pg-text-muted: #71786c;
+  --pg-primary: #19a41c;
+  --pg-primary-dark: #229320;
+  --pg-radius-md: 14px;
+  --pg-radius-pill: 999px;
+  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(25, 164, 28, 0.06);
+}
+
+.recent-orders {
+  background: var(--pg-surface);
+  border: 1px solid var(--pg-border);
+  border-radius: var(--pg-radius-md);
+  box-shadow: var(--pg-shadow-soft);
+  overflow: hidden;
+}
+
+.recent-orders-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pg-text);
+  margin: 0;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--pg-border);
+}
+
+.recent-orders-table-wrap {
+  overflow-x: auto;
+}
+
+.recent-orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.recent-orders-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pg-text-muted);
+  padding: 12px 22px;
+  background: var(--pg-surface-alt);
+  white-space: nowrap;
+}
+
+.recent-orders-table td {
+  padding: 14px 22px;
+  border-top: 1px solid var(--pg-border);
+  color: var(--pg-text);
+  white-space: nowrap;
+}
+
+.recent-orders-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.recent-orders-table tbody tr:hover {
+  background: var(--pg-surface-alt);
+}
+
+.recent-orders-amount {
+  font-weight: 600;
+  color: var(--pg-primary-dark);
+}
+
+.recent-orders-empty-row td {
+  text-align: center;
+  color: var(--pg-text-muted);
+  padding: 32px 22px;
+}
+
+/* Badges de statut ------------------------------------------------------ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--pg-radius-pill);
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: #fdf3e0;
+  color: #a8710f;
+}
+
+.status-preparing {
+  background: #e9f1fb;
+  color: #2563a8;
+}
+
+.status-ready {
+  background: #eaf7ea;
+  color: var(--pg-primary-dark);
+}
+
+.status-completed {
+  background: #eaf7ea;
+  color: var(--pg-primary-dark);
+}
+
+.status-cancelled {
+  background: #fbecec;
+  color: #b23b3b;
+}
+
+.status-default {
+  background: var(--pg-surface-alt);
+  color: var(--pg-text-muted);
+}
+
+/* Responsive : le tableau devient une liste de "cartes" sur mobile ------ */
+
+@media (max-width: 640px) {
+  .recent-orders-table thead {
+    display: none;
+  }
+
+  .recent-orders-table,
+  .recent-orders-table tbody,
+  .recent-orders-table tr,
+  .recent-orders-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .recent-orders-table tr {
+    border-top: 1px solid var(--pg-border);
+    padding: 12px 22px;
+  }
+
+  .recent-orders-table tr:first-child {
+    border-top: none;
+  }
+
+  .recent-orders-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border: none;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .recent-orders-table td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--pg-text-muted);
+    text-align: left;
+  }
+
+  .recent-orders-empty-row td {
+    display: block;
+    text-align: center;
+  }
+
+  .recent-orders-empty-row td::before {
+    content: none;
+  }
+}

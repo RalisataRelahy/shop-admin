@@ -9,7 +9,6 @@ const listBtn = [
     { name: "Gestion Commandes", path: "/commandes" },
     { name: "Gestion Catégories-plats", path: "/categories" },
     { name: "Gestion Menu", path: "/menu" },
-    { name: "Gestion Promotions", path: "/promotions" },
     { name: "Gestion Clients", path: "/clients" }
 ];
 

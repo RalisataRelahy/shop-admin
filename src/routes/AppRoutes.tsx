@@ -8,7 +8,6 @@ import SignUpPage from "../features/auth/views/SignUp";
 import DashboardScreen from "../features/dashboards/views/DashboardScreen";
 import OrdersScreen from "../features/orders/views/OrdersScreen";
 import CategoriesScreen from "../features/categories/views/CategoriesScreen";
-import PromotionsScreen from "../features/promotions/views/PromotionsScreen";
 import ProductsScreen from "../features/products/views/ProductsScreen";
 import ClientScreen from "../features/clients/views/Client";
 
@@ -30,7 +29,7 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<DashboardScreen />} />
           <Route path="/commandes" element={<OrdersScreen />} />
           <Route path="/categories" element={<CategoriesScreen />} />
-          <Route path="/promotions" element={<PromotionsScreen />} />
+    
           <Route path="/menu" element={<ProductsScreen />} />
           <Route path="/clients" element={<ClientScreen />} />
         </Route>
