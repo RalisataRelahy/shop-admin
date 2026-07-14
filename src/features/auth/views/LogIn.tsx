@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { supabase } from "../../../supabase/config";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import "./login.css";
 
 export default function LoginPage() {

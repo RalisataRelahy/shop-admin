@@ -1,6 +1,5 @@
-import React from "react";
 
-export const statusBadge = (value: string): JSX.Element => {
+export const statusBadge = (value: string) => {
   const map: Record<string, string> = {
     "En attente": "badge-orange",
     "En cours": "badge-gray",
@@ -10,7 +9,7 @@ export const statusBadge = (value: string): JSX.Element => {
   return <span className={`badge ${map[value] || "badge-gray"}`}>{value}</span>;
 };
 
-export const boolBadge = (value: boolean): JSX.Element =>
+export const boolBadge = (value: boolean)=>
   value ? (
     <span className="badge badge-green">Oui</span>
   ) : (

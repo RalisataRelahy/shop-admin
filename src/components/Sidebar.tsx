@@ -1,4 +1,8 @@
-import type { NavItem } from "../types";
+interface NavItem {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size: number }>;
+}
 
 interface SidebarProps {
   items: NavItem[];

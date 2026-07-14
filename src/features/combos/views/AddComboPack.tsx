@@ -1,5 +1,4 @@
 import { Plus } from "lucide-react";
-import type { MenuItem } from "../../products/data/ProductsModels";
 
 export interface ComboFormState {
   name: string;
@@ -8,6 +7,11 @@ export interface ComboFormState {
   imageUrl: string;
   itemIds: number[];
   available: boolean;
+}
+
+interface MenuItem {
+  id: number;
+  name: string;
 }
 
 interface AddComboPackPageProps {
