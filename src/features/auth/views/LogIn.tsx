@@ -73,9 +73,9 @@ export default function LoginPage() {
           {loading ? "Connexion..." : <><LogIn size={18} />Se connecter</>}
         </button>
 
-        <p className="auth-link">
+        {/* <p className="auth-link">
           Pas encore de compte ? <Link to="/signup">Créer un compte</Link>
-        </p>
+        </p> */}
       </form>
     </div>
   );
