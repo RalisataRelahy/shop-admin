@@ -29,6 +29,7 @@ interface Category {
 }
 
 interface VariantFormState {
+  id?: string | number; // présent si la variante existe déjà en base
   name: string;
   price: string;
   display_order: number;
@@ -69,6 +70,16 @@ export default function ProductsPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // --- Edition ---
+  const [editingProduct, setEditingProduct] = useState<ProductsModel | null>(
+    null
+  );
+  // ids des variantes supprimées côté formulaire pendant l'édition,
+  // à effacer en base au moment de l'enregistrement.
+  const [deletedVariantIds, setDeletedVariantIds] = useState<(string | number)[]>([]);
+
+  const isEditing = editingProduct !== null;
+
   const loadProducts = async () => {
     const { data, error } = await supabase
       .from("products")
@@ -88,7 +99,7 @@ export default function ProductsPage() {
     setLoading(false);
   };
 
-  // VARIANT CRUD
+  // VARIANT CRUD (formulaire)
   const addVariant = () => {
     setForm((prev) => ({
       ...prev,
@@ -122,6 +133,13 @@ export default function ProductsPage() {
       return;
     }
 
+    const removed = form.variants[index];
+    // Si la variante existait déjà en base, on mémorise son id pour
+    // la supprimer réellement au moment de l'enregistrement.
+    if (removed.id) {
+      setDeletedVariantIds((prev: any) => [...prev, removed.id as string | number]);
+    }
+
     setForm((prev) => ({
       ...prev,
       variants: prev.variants.filter((_, i) => i !== index),
@@ -150,52 +168,82 @@ export default function ProductsPage() {
     setShowForm(false);
     setPreviewImage(null);
     setSelectedFile(null);
+    setEditingProduct(null);
+    setDeletedVariantIds([]);
   };
 
-  const addProduct = async () => {
-    if (submitting) return; // évite les doubles clics / double soumission
+  // Prépare le formulaire pour éditer un produit existant.
+  const startEditProduct = (product: ProductsModel) => {
+    setEditingProduct(product);
+    setDeletedVariantIds([]);
+    setSelectedFile(null);
+    setPreviewImage(null);
+    setErrorMessage(null);
 
+    setForm({
+      name: product.name,
+      category_id: String(product.category_id),
+      description: product.description ?? "",
+      image_url: product.image_url ?? "",
+      variants:
+        product.product_variants && product.product_variants.length > 0
+          ? product.product_variants.map((v, i) => ({
+              id: v.id,
+              name: v.name,
+              price: String(v.price),
+              display_order: v.display_order ?? i + 1,
+            }))
+          : [{ name: "Standard", price: "", display_order: 1 }],
+    });
+
+    setShowForm(true);
+  };
+
+  const validateForm = () => {
     if (!form.name.trim()) {
       setErrorMessage("Le nom est obligatoire");
-      return;
+      return false;
     }
 
     if (!form.category_id) {
       setErrorMessage("La catégorie est obligatoire");
-      return;
+      return false;
     }
 
     if (form.variants.length === 0) {
       setErrorMessage("Ajoutez au moins une variante");
-      return;
+      return false;
     }
 
     for (const v of form.variants) {
       if (!v.name.trim()) {
         setErrorMessage("Chaque variante doit avoir un nom");
-        return;
+        return false;
       }
 
       if (Number(v.price) <= 0 || Number.isNaN(Number(v.price))) {
         setErrorMessage("Le prix doit être supérieur à 0");
-        return;
+        return false;
       }
     }
+
+    return true;
+  };
+
+  const addProduct = async () => {
+    if (!validateForm()) return;
 
     setSubmitting(true);
 
     try {
       let imageUrl = form.image_url;
 
-      // On n'upload que si une image a été sélectionnée ET n'a pas déjà
-      // été envoyée via le bouton "Confirmer l'envoi" (sinon double upload).
       if (selectedFile && !imageUrl) {
         setUploadingImage(true);
         imageUrl = await uploadProductImage(selectedFile, form.name);
         setUploadingImage(false);
       }
 
-      // 1 - création produit
       const { data: product, error: productError } = await crudService.create(
         "products",
         {
@@ -209,14 +257,11 @@ export default function ProductsPage() {
 
       if (productError) throw productError;
 
-      // crudService.create peut renvoyer soit un objet, soit un tableau
-      // selon l'implémentation du service : on sécurise l'extraction de l'id.
       const createdProduct = Array.isArray(product) ? product[0] : product;
       if (!createdProduct?.id) {
         throw new Error("Le produit a été créé mais son identifiant est introuvable");
       }
 
-      // 2 - création variantes
       const variants = form.variants.map((v) => ({
         product_id: createdProduct.id,
         name: v.name,
@@ -240,6 +285,88 @@ export default function ProductsPage() {
     }
   };
 
+  const updateProduct = async () => {
+    if (!editingProduct) return;
+    if (!validateForm()) return;
+
+    setSubmitting(true);
+
+    try {
+      let imageUrl = form.image_url;
+
+      // Nouvelle image sélectionnée mais pas encore confirmée via
+      // "Confirmer l'envoi" : on l'upload maintenant.
+      if (selectedFile && !imageUrl) {
+        setUploadingImage(true);
+        imageUrl = await uploadProductImage(selectedFile, form.name);
+        setUploadingImage(false);
+      }
+
+      // 1 - mise à jour des infos du produit
+      const { error: productError } = await crudService.update(
+        "products",
+        editingProduct.id,
+        {
+          name: form.name.trim(),
+          category_id: form.category_id,
+          description: form.description,
+          image_url: imageUrl,
+        }
+      );
+      if (productError) throw productError;
+
+      // 2 - variantes : on sépare celles à mettre à jour (id existant)
+      // de celles à créer (pas d'id).
+      const toUpdate = form.variants.filter((v) => v.id);
+      const toCreate = form.variants.filter((v) => !v.id);
+
+      for (const v of toUpdate) {
+        const { error } = await crudService.update("product_variants", v.id!, {
+          name: v.name,
+          price: Number(v.price),
+        });
+        if (error) throw error;
+      }
+
+      if (toCreate.length > 0) {
+        const { error } = await crudService.insertMany(
+          "product_variants",
+          toCreate.map((v) => ({
+            product_id: editingProduct.id,
+            name: v.name,
+            price: Number(v.price),
+            is_available: true,
+          }))
+        );
+        if (error) throw error;
+      }
+
+      // 3 - variantes supprimées par l'utilisateur pendant l'édition
+      for (const id of deletedVariantIds) {
+        const { error } = await crudService.delete("product_variants", id);
+        if (error) throw error;
+      }
+
+      resetForm();
+      await loadProducts();
+    } catch (e) {
+      setUploadingImage(false);
+      setErrorMessage(`Erreur lors de la modification: ${e} `);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Point d'entrée unique appelé par le bouton "Enregistrer"
+  const saveProduct = async () => {
+    if (submitting) return; // évite les doubles clics / double soumission
+    if (isEditing) {
+      await updateProduct();
+    } else {
+      await addProduct();
+    }
+  };
+
   const deleteProduct = async (id: number | string, name: string) => {
     const confirmed = window.confirm(
       `Supprimer définitivement "${name}" ? Cette action est irréversible.`
@@ -259,7 +386,6 @@ export default function ProductsPage() {
   const handleImageSelection = (file: File | null) => {
     if (!file) return;
 
-    // Une nouvelle sélection invalide une éventuelle image déjà confirmée.
     setSelectedFile(file);
     setForm((prev) => ({ ...prev, image_url: "" }));
 
@@ -278,8 +404,6 @@ export default function ProductsPage() {
       setUploadingImage(true);
       const publicUrl = await uploadProductImage(selectedFile, form.name);
       setForm((prev) => ({ ...prev, image_url: publicUrl }));
-      // On vide selectedFile pour éviter un ré-upload au submit, tout en
-      // gardant l'aperçu visible (form.image_url pilote l'affichage confirmé).
       setSelectedFile(null);
       setErrorMessage(null);
     } catch (err) {
@@ -319,12 +443,18 @@ export default function ProductsPage() {
           <div>
             <h1 className="prod-title">Gestion des Menus/Plat</h1>
             <p className="prod-subtitle">
-              Consultez, ajoutez, supprimez ou désactivez vos plats/menus.
+              Consultez, ajoutez, modifiez, supprimez ou désactivez vos plats/menus.
             </p>
           </div>
           <button
             className="prod-btn-primary"
-            onClick={() => setShowForm((prev) => !prev)}
+            onClick={() => {
+              if (showForm) {
+                resetForm();
+              } else {
+                setShowForm(true);
+              }
+            }}
           >
             {showForm ? "Fermer" : "+ Ajouter un plat"}
           </button>
@@ -334,6 +464,10 @@ export default function ProductsPage() {
 
         {showForm && (
           <div className="prod-form">
+            <h2 className="prod-form-title">
+              {isEditing ? `Modifier "${editingProduct?.name}"` : "Nouveau plat"}
+            </h2>
+
             <div className="prod-form-grid">
               <div className="prod-field">
                 <label className="prod-label">Nom</label>
@@ -370,7 +504,7 @@ export default function ProductsPage() {
                 <label className="prod-label">Variantes / Tailles</label>
 
                 {form.variants.map((variant, index) => (
-                  <div key={index} className="variant-row">
+                  <div key={variant.id ?? `new-${index}`} className="variant-row">
                     <input
                       className="prod-input"
                       placeholder="Nom (MM, GM...)"
@@ -434,6 +568,7 @@ export default function ProductsPage() {
                     />
                   </label>
                 </div>
+
                 {previewImage && !form.image_url && (
                   <div className="prod-image-preview-card">
                     <img
@@ -457,6 +592,7 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
+
                 {form.image_url && (
                   <div className="prod-image-preview-card">
                     <img
@@ -465,8 +601,11 @@ export default function ProductsPage() {
                       className="prod-image-preview"
                     />
                     <div className="prod-image-preview-info">
-                      <span className="prod-image-confirmed">✓ Upload confirmé</span>
+                      <span className="prod-image-confirmed">✓ Image actuelle</span>
                       <p className="prod-uploaded-url">{form.image_url}</p>
+                      <p className="prod-uploaded-url">
+                        Glissez une nouvelle image ci-dessus pour la remplacer.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -488,10 +627,14 @@ export default function ProductsPage() {
             <div className="prod-form-actions">
               <button
                 className="prod-btn-primary"
-                onClick={addProduct}
+                onClick={saveProduct}
                 disabled={submitting}
               >
-                {submitting ? "Enregistrement…" : "Enregistrer"}
+                {submitting
+                  ? "Enregistrement…"
+                  : isEditing
+                  ? "Mettre à jour"
+                  : "Enregistrer"}
               </button>
               <button
                 type="button"
@@ -553,6 +696,12 @@ export default function ProductsPage() {
                     title={product.is_active ? "Désactiver" : "Activer"}
                   >
                     <span className="prod-switch-knob" />
+                  </button>
+                  <button
+                    className="prod-btn-ghost"
+                    onClick={() => startEditProduct(product)}
+                  >
+                    Modifier
                   </button>
                   <button
                     className="prod-btn-danger"
