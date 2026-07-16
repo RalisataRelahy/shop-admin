@@ -10,7 +10,6 @@ import OrdersScreen from "../features/orders/views/OrdersScreen";
 import CategoriesScreen from "../features/categories/views/CategoriesScreen";
 import ProductsScreen from "../features/products/views/ProductsScreen";
 import ClientScreen from "../features/clients/views/Client";
-import ComboManagerPage from "../features/combos/views/ComboManager";
 import AddComboPackPage from "../features/combos/views/ComboManager";
 
 export default function AppRoutes() {
