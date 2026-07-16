@@ -94,9 +94,14 @@ export default function ProductsPage() {
       setLoading(false);
       return;
     }
+
     setErrorMessage(null);
     setProducts(data ?? []);
     setLoading(false);
+    console.log(products.map(p => ({
+      name: p.name,
+      image: p.image_url
+    })));
   };
 
   // VARIANT CRUD (formulaire)
@@ -286,77 +291,91 @@ export default function ProductsPage() {
   };
 
   const updateProduct = async () => {
-    if (!editingProduct) return;
-    if (!validateForm()) return;
+  if (!editingProduct) return;
+  if (!validateForm()) return;
 
-    setSubmitting(true);
+  setSubmitting(true);
 
-    try {
-      let imageUrl = form.image_url;
+  try {
+    let imageUrl = form.image_url;
 
-      // Nouvelle image sélectionnée mais pas encore confirmée via
-      // "Confirmer l'envoi" : on l'upload maintenant.
-      if (selectedFile && !imageUrl) {
-        setUploadingImage(true);
-        imageUrl = await uploadProductImage(selectedFile, form.name);
-        setUploadingImage(false);
-      }
-
-      // 1 - mise à jour des infos du produit
-      const { error: productError } = await crudService.update(
-        "products",
-        editingProduct.id,
-        {
-          name: form.name.trim(),
-          category_id: form.category_id,
-          description: form.description,
-          image_url: imageUrl,
-        }
-      );
-      if (productError) throw productError;
-
-      // 2 - variantes : on sépare celles à mettre à jour (id existant)
-      // de celles à créer (pas d'id).
-      const toUpdate = form.variants.filter((v) => v.id);
-      const toCreate = form.variants.filter((v) => !v.id);
-
-      for (const v of toUpdate) {
-        const { error } = await crudService.update("product_variants", v.id!, {
-          name: v.name,
-          price: Number(v.price),
-        });
-        if (error) throw error;
-      }
-
-      if (toCreate.length > 0) {
-        const { error } = await crudService.insertMany(
-          "product_variants",
-          toCreate.map((v) => ({
-            product_id: editingProduct.id,
-            name: v.name,
-            price: Number(v.price),
-            is_available: true,
-          }))
-        );
-        if (error) throw error;
-      }
-
-      // 3 - variantes supprimées par l'utilisateur pendant l'édition
-      for (const id of deletedVariantIds) {
-        const { error } = await crudService.delete("product_variants", id);
-        if (error) throw error;
-      }
-
-      resetForm();
-      await loadProducts();
-    } catch (e) {
+    if (selectedFile && !imageUrl) {
+      setUploadingImage(true);
+      imageUrl = await uploadProductImage(selectedFile, form.name);
       setUploadingImage(false);
-      setErrorMessage(`Erreur lors de la modification: ${e} `);
-    } finally {
-      setSubmitting(false);
     }
-  };
 
+    // Mise à jour du produit
+    const { error: productError } = await crudService.update(
+      "products",
+      editingProduct.id,
+      {
+        name: form.name.trim(),
+        category_id: Number(form.category_id),
+        description: form.description,
+        image_url: imageUrl,
+      }
+    );
+
+    if (productError) throw productError;
+
+    // Variantes existantes
+    const updatePromises = form.variants
+      .filter(v => v.id)
+      .map(v =>
+        crudService.update("product_variants", v.id!, {
+          name: v.name.trim(),
+          price: Number(v.price),
+          display_order: v.display_order,
+          is_available: true,
+        })
+      );
+
+    // Nouvelles variantes
+    const newVariants = form.variants
+      .filter(v => !v.id)
+      .map(v => ({
+        product_id: editingProduct.id,
+        name: v.name.trim(),
+        price: Number(v.price),
+        display_order: v.display_order,
+        is_available: true,
+      }));
+
+    // Variantes supprimées
+    const deletePromises = deletedVariantIds.map(id =>
+      crudService.delete("product_variants", id)
+    );
+
+    await Promise.all(updatePromises);
+
+    if (newVariants.length > 0) {
+      const { error } = await crudService.insertMany(
+        "product_variants",
+        newVariants
+      );
+
+      if (error) throw error;
+    }
+
+    await Promise.all(deletePromises);
+
+    resetForm();
+    await loadProducts();
+
+  } catch (err) {
+    console.error(err);
+
+    setErrorMessage(
+      err instanceof Error
+        ? err.message
+        : "Erreur lors de la mise à jour."
+    );
+  } finally {
+    setUploadingImage(false);
+    setSubmitting(false);
+  }
+};
   // Point d'entrée unique appelé par le bouton "Enregistrer"
   const saveProduct = async () => {
     if (submitting) return; // évite les doubles clics / double soumission
@@ -661,7 +680,7 @@ export default function ProductsPage() {
               >
                 <div className="prod-card-image">
                   {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} />
+                    <img src={product.image_url.trim()} alt={product.name} />
                   ) : (
                     <div className="prod-card-image-placeholder">Pas d'image</div>
                   )}
