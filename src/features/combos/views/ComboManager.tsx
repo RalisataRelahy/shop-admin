@@ -117,7 +117,7 @@ export default function ComboManagerPage() {
             />
             <div className="combo-row-info">
               <strong>{combo.name}</strong>
-              <span className="combo-row-price">{combo.price.toFixed(2)} €</span>
+              <span className="combo-row-price">{combo.price.toLocaleString()} Ar</span>
               <span className="combo-row-meta">
                 {combo.is_active ? "Disponible" : "Indisponible"}
               </span>

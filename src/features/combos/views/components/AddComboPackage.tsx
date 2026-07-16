@@ -128,7 +128,7 @@ export default function AddComboPackPage({
         </label>
 
         <label className="field">
-          <span>Prix (€)</span>
+          <span>Prix (Ar)</span>
           <input
             type="number"
             step="0.1"
