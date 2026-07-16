@@ -2,34 +2,45 @@ import { supabase } from "./config";
 import imageCompression from 'browser-image-compression';
 
 export const uploadProductImage = async (file: File, customFileName?: string) => {
-  // 1. Force l'extension en .jpg puisque l'option 'fileType' va convertir l'image en JPEG
-  const fileName = customFileName ? `${customFileName}.jpg` : `${Date.now()}.jpg`;
+  let fileName = `${Date.now()}.jpg`;
+
+  if (customFileName) {
+    // 1. Nettoie le nom : supprime les accents, remplace les espaces par des tirets, enlève le .jpg existant si présent
+    const cleanName = customFileName
+      .normalize("NFD")                      // Sépare les lettres de leurs accents
+      .replace(/[\u0300-\u036f]/g, "")       // Supprime les accents
+      .replace(/\.[^/.]+$/, "")              // Enlève l'extension d'origine si incluse
+      .replace(/[^a-zA-Z0-9-_]/g, "-")       // Remplace tout caractère non-alphanumérique (dont espaces) par un tiret
+      .replace(/-+/g, "-")                   // Évite les doubles tirets successifs
+      .toLowerCase();                        // Force les minuscules pour la cohérence URL
+
+    fileName = `${cleanName}.jpg`;
+  }
+
   const filePath = `products/${fileName}`;
 
   const options = {
-    maxSizeMB: 0.5,         // 500 Ko maximum
-    maxWidthOrHeight: 1024, // Redimensionnement automatique à 1024px max
-    useWebWorker: true,     // Thread séparé pour les performances de l'UI
-    fileType: 'image/jpeg'  // Conversion forcée en JPEG
+    maxSizeMB: 0.5,         
+    maxWidthOrHeight: 1024, 
+    useWebWorker: true,     
+    fileType: 'image/jpeg'  
   };
 
   try {
-    // 2. Exécution de la compression
     const compressedFile = await imageCompression(file, options);
     
-    // 3. Téléversement du fichier compressé vers Supabase Storage
+    // 2. Création d'un nouveau fichier pour garantir le bon type MIME et le bon nom dans l'en-tête de la requête
+    const finalFile = new File([compressedFile], fileName, { type: 'image/jpeg' });
+
     const { error: uploadError } = await supabase.storage
       .from("shop_images")
-      .upload(filePath, compressedFile, {
-        cacheControl: "31536000", // Cache d'un an (idéal pour des images de produits fixes)
+      .upload(filePath, finalFile, {
+        cacheControl: "31536000", 
         upsert: true,
       });
 
-    if (uploadError) {
-      throw uploadError;
-    }
+    if (uploadError) throw uploadError;
 
-    // 4. Récupération de l'URL publique
     const { data } = supabase.storage.from("shop_images").getPublicUrl(filePath);
     return data.publicUrl;
 
@@ -38,3 +49,4 @@ export const uploadProductImage = async (file: File, customFileName?: string) =>
     throw error;
   }
 };
+
