@@ -1,6 +1,5 @@
 import { supabase } from "./config";
 import imageCompression from 'browser-image-compression';
-
 /**
  * Recadre l'image d'origine pour en extraire le centre sous forme de rectangle horizontal
  * avec une largeur stricte de 320px et une hauteur de 180px (ratio 16:9).
@@ -74,56 +73,52 @@ export const cropAndResizeToHorizontal = (file: File): Promise<File> => {
     img.onerror = (err) => reject(err);
   });
 };
-
-/**
- * Traite, recadre, compresse et uploade l'image d'un produit vers Supabase.
- */
-export const uploadProductImage = async (file: File, customFileName?: string): Promise<string> => {
+export const uploadProductImage = async (file: File, customFileName?: string) => {
   let fileName = `${Date.now()}.jpg`;
 
   if (customFileName) {
+    // 1. Nettoie le nom : supprime les accents, remplace les espaces par des tirets, enlève le .jpg existant si présent
     const cleanName = customFileName
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^a-zA-Z0-9-_]/g, "-")
-      .replace(/-+/g, "-")
-      .toLowerCase();
+      .normalize("NFD")                      // Sépare les lettres de leurs accents
+      .replace(/[\u0300-\u036f]/g, "")       // Supprime les accents
+      .replace(/\.[^/.]+$/, "")              // Enlève l'extension d'origine si incluse
+      .replace(/[^a-zA-Z0-9-_]/g, "-")       // Remplace tout caractère non-alphanumérique (dont espaces) par un tiret
+      .replace(/-+/g, "-")                   // Évite les doubles tirets successifs
+      .toLowerCase();                        // Force les minuscules pour la cohérence URL
 
     fileName = `${cleanName}.jpg`;
   }
 
   const filePath = `products/${fileName}`;
 
+  const options = {
+    maxSizeMB: 0.5,         
+    maxWidthOrHeight: 1024, 
+    useWebWorker: true,     
+    fileType: 'image/jpeg'  
+  };
+
   try {
-    // 1. Force le recadrage au format rectangle horizontal (320x180)
-    const croppedFile = await cropAndResizeToHorizontal(file);
+    const compressedFile = await imageCompression(file, options);
+    
+    // 2. Création d'un nouveau fichier pour garantir le bon type MIME et le bon nom dans l'en-tête de la requête
+    const finalFile = new File([compressedFile], fileName, { type: 'image/jpeg' });
 
-    // 2. Finalise la compression du fichier final pour optimiser le poids
-    const options = {
-      maxSizeMB: 0.1, // Idéal pour du 320x180 (l'image sera ultra légère)
-      useWebWorker: true,
-      fileType: 'image/jpeg'
-    };
-    const compressedBlob = await imageCompression(croppedFile, options);
-    const finalFile = new File([compressedBlob], fileName, { type: 'image/jpeg' });
-
-    // 3. Importation sur Supabase
     const { error: uploadError } = await supabase.storage
       .from("shop_images")
       .upload(filePath, finalFile, {
-        cacheControl: "31536000",
+        cacheControl: "31536000", 
         upsert: true,
       });
 
     if (uploadError) throw uploadError;
 
-    // 4. Récupération de l'URL publique
     const { data } = supabase.storage.from("shop_images").getPublicUrl(filePath);
     return data.publicUrl;
 
   } catch (error) {
-    console.error("Erreur lors du traitement ou de l'upload de l'image :", error);
+    console.error("Erreur lors du traitement de l'image :", error);
     throw error;
   }
 };
+
