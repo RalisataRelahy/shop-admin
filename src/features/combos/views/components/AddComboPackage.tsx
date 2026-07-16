@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import { Plus, Upload, X } from "lucide-react";
 import { supabase } from "../../../../supabase/config";
+import { cropAndResizeToHorizontal } from "../../../../supabase/storage";
 
 export interface ComboFormState {
   name: string;
@@ -49,13 +50,17 @@ export default function AddComboPackPage({
 
     setUploading(true);
     try {
-      const fileExt = file.name.split(".").pop();
-      const filePath = `${crypto.randomUUID()}.${fileExt}`;
+      // 1. Correction : Ajout du 'await' indispensable pour attendre le recadrage
+      const sizedImage = await cropAndResizeToHorizontal(file);
+      
+      // 2. Optimisation : L'image finale étant un JPEG généré par le canvas, on force l'extension .jpg
+      const filePath = `products/${crypto.randomUUID()}.jpg`;
 
+      // 3. Upload du fichier physique redimensionné (320x180)
       const { error: uploadErr } = await supabase.storage
         .from(IMAGES_BUCKET)
-        .upload(filePath, file, {
-          cacheControl: "3600",
+        .upload(filePath, sizedImage, {
+          cacheControl: "31536000", // Augmenté à 1 an pour un meilleur caching CDN
           upsert: false,
         });
 
@@ -145,6 +150,7 @@ export default function AddComboPackPage({
           <div className="image-upload">
             {comboForm.imageUrl ? (
               <div className="image-preview">
+                {/* L'image affichée ici fera désormais exactement 320x180px d'origine */}
                 <img src={comboForm.imageUrl} alt="Aperçu du pack" />
                 <button
                   type="button"
