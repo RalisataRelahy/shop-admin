@@ -680,7 +680,10 @@ export default function ProductsPage() {
               >
                 <div className="prod-card-image">
                   {product.image_url ? (
-                    <img src={product.image_url.trim()} alt={product.name} />
+                    <img
+  src={`${product.image_url}?v=${Date.now()}`}
+  alt={product.name}
+  />
                   ) : (
                     <div className="prod-card-image-placeholder">Pas d'image</div>
                   )}
