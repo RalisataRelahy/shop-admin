@@ -1,0 +1,357 @@
+/* ComboManager.css
+   Styles pour ComboManagerPage + AddComboPackPage */
+
+:root {
+  --combo-bg: #f7f8fa;
+  --combo-surface: #ffffff;
+  --combo-border: #e5e7eb;
+  --combo-text: #111827;
+  --combo-text-muted: #6b7280;
+  --combo-primary: #16a34a;
+  --combo-primary-hover: #15803d;
+  --combo-secondary: #eef0f3;
+  --combo-secondary-hover: #e2e5e9;
+  --combo-danger: #dc2626;
+  --combo-danger-hover: #b91c1c;
+  --combo-radius: 10px;
+  --combo-radius-sm: 6px;
+}
+
+/* ---------- Layout général ---------- */
+
+.page {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  color: var(--combo-text);
+}
+
+/* ---------- Carte (formulaire + lignes de liste) ---------- */
+
+.card {
+  background: var(--combo-surface);
+  border: 1px solid var(--combo-border);
+  border-radius: var(--combo-radius);
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--combo-text);
+}
+
+.card-subtitle {
+  margin-top: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--combo-text-muted);
+}
+
+/* ---------- Formulaire ---------- */
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--combo-text);
+}
+
+.field input,
+.field textarea {
+  font: inherit;
+  color: var(--combo-text);
+  background: var(--combo-bg);
+  border: 1px solid var(--combo-border);
+  border-radius: var(--combo-radius-sm);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: var(--combo-primary);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--combo-text);
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--combo-primary);
+}
+
+/* ---------- Sélecteur d'éléments (chips) ---------- */
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--combo-border);
+  background: var(--combo-surface);
+  color: var(--combo-text);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--combo-primary);
+}
+
+.chip.selected {
+  background: var(--combo-primary);
+  border-color: var(--combo-primary);
+  color: #fff;
+}
+
+/* ---------- Upload d'image ---------- */
+
+.image-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.image-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 120px;
+  border: 1.5px dashed var(--combo-border);
+  border-radius: var(--combo-radius-sm);
+  background: var(--combo-bg);
+  color: var(--combo-text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.image-dropzone:hover:not(:disabled) {
+  border-color: var(--combo-primary);
+  color: var(--combo-primary);
+}
+
+.image-dropzone:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.image-preview {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--combo-radius-sm);
+  border: 1px solid var(--combo-border);
+}
+
+.image-preview-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--combo-danger);
+  color: #fff;
+  border: 2px solid var(--combo-surface);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.image-replace-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* ---------- Boutons ---------- */
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: var(--combo-radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--combo-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--combo-primary-hover);
+}
+
+.btn-secondary {
+  background: var(--combo-secondary);
+  color: var(--combo-text);
+  border-color: var(--combo-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--combo-secondary-hover);
+}
+
+.btn-danger {
+  background: var(--combo-danger);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--combo-danger-hover);
+}
+
+/* ---------- Liste des packs ---------- */
+
+.card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.combo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.combo-row-inactive {
+  opacity: 0.55;
+}
+
+.combo-row-image {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--combo-radius-sm);
+  flex-shrink: 0;
+  background: var(--combo-bg);
+}
+
+.combo-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.combo-row-info strong {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combo-row-price {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.combo-row-meta {
+  font-size: 13px;
+  color: var(--combo-text-muted);
+}
+
+/* ---------- Messages d'état ---------- */
+
+.hint-text {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--combo-text-muted);
+}
+
+.error-text {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--combo-danger);
+  font-weight: 500;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: var(--combo-text-muted);
+  font-style: italic;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 560px) {
+  .combo-row {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .combo-row .actions {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .combo-row .actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

@@ -10,6 +10,7 @@ const listBtn = [
     { name: "Gestion Commandes", path: "/commandes" },
     { name: "Gestion Catégories-plats", path: "/categories" },
     { name: "Gestion Menu", path: "/menu" },
+    {name:"Gestion des combos", path:"/combo"},
     { name: "Gestion Clients", path: "/clients" }
 ];
 
