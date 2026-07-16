@@ -193,11 +193,11 @@ export default function ProductsPage() {
       variants:
         product.product_variants && product.product_variants.length > 0
           ? product.product_variants.map((v, i) => ({
-              id: v.id,
-              name: v.name,
-              price: String(v.price),
-              display_order: v.display_order ?? i + 1,
-            }))
+            id: v.id,
+            name: v.name,
+            price: String(v.price),
+            display_order: v.display_order ?? i + 1,
+          }))
           : [{ name: "Standard", price: "", display_order: 1 }],
     });
 
@@ -291,91 +291,91 @@ export default function ProductsPage() {
   };
 
   const updateProduct = async () => {
-  if (!editingProduct) return;
-  if (!validateForm()) return;
+    if (!editingProduct) return;
+    if (!validateForm()) return;
 
-  setSubmitting(true);
+    setSubmitting(true);
 
-  try {
-    let imageUrl = form.image_url;
+    try {
+      let imageUrl = form.image_url;
 
-    if (selectedFile && !imageUrl) {
-      setUploadingImage(true);
-      imageUrl = await uploadProductImage(selectedFile, form.name);
-      setUploadingImage(false);
-    }
-
-    // Mise à jour du produit
-    const { error: productError } = await crudService.update(
-      "products",
-      editingProduct.id,
-      {
-        name: form.name.trim(),
-        category_id: Number(form.category_id),
-        description: form.description,
-        image_url: imageUrl,
+      if (selectedFile && !imageUrl) {
+        setUploadingImage(true);
+        imageUrl = await uploadProductImage(selectedFile, form.name);
+        setUploadingImage(false);
       }
-    );
 
-    if (productError) throw productError;
+      // Mise à jour du produit
+      const { error: productError } = await crudService.update(
+        "products",
+        editingProduct.id,
+        {
+          name: form.name.trim(),
+          category_id: Number(form.category_id),
+          description: form.description,
+          image_url: imageUrl,
+        }
+      );
 
-    // Variantes existantes
-    const updatePromises = form.variants
-      .filter(v => v.id)
-      .map(v =>
-        crudService.update("product_variants", v.id!, {
+      if (productError) throw productError;
+
+      // Variantes existantes
+      const updatePromises = form.variants
+        .filter(v => v.id)
+        .map(v =>
+          crudService.update("product_variants", v.id!, {
+            name: v.name.trim(),
+            price: Number(v.price),
+            display_order: v.display_order,
+            is_available: true,
+          })
+        );
+
+      // Nouvelles variantes
+      const newVariants = form.variants
+        .filter(v => !v.id)
+        .map(v => ({
+          product_id: editingProduct.id,
           name: v.name.trim(),
           price: Number(v.price),
           display_order: v.display_order,
           is_available: true,
-        })
+        }));
+
+      // Variantes supprimées
+      const deletePromises = deletedVariantIds.map(id =>
+        crudService.delete("product_variants", id)
       );
 
-    // Nouvelles variantes
-    const newVariants = form.variants
-      .filter(v => !v.id)
-      .map(v => ({
-        product_id: editingProduct.id,
-        name: v.name.trim(),
-        price: Number(v.price),
-        display_order: v.display_order,
-        is_available: true,
-      }));
+      await Promise.all(updatePromises);
 
-    // Variantes supprimées
-    const deletePromises = deletedVariantIds.map(id =>
-      crudService.delete("product_variants", id)
-    );
+      if (newVariants.length > 0) {
+        const { error } = await crudService.insertMany(
+          "product_variants",
+          newVariants
+        );
 
-    await Promise.all(updatePromises);
+        if (error) throw error;
+      }
 
-    if (newVariants.length > 0) {
-      const { error } = await crudService.insertMany(
-        "product_variants",
-        newVariants
+      await Promise.all(deletePromises);
+
+      resetForm();
+      await loadProducts();
+
+    } catch (err) {
+      console.error(err);
+
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la mise à jour."
       );
-
-      if (error) throw error;
+    } finally {
+      setUploadingImage(false);
+      setSubmitting(false);
     }
-
-    await Promise.all(deletePromises);
-
-    resetForm();
-    await loadProducts();
-
-  } catch (err) {
-    console.error(err);
-
-    setErrorMessage(
-      err instanceof Error
-        ? err.message
-        : "Erreur lors de la mise à jour."
-    );
-  } finally {
-    setUploadingImage(false);
-    setSubmitting(false);
-  }
-};
+  };
   // Point d'entrée unique appelé par le bouton "Enregistrer"
   const saveProduct = async () => {
     if (submitting) return; // évite les doubles clics / double soumission
@@ -652,8 +652,8 @@ export default function ProductsPage() {
                 {submitting
                   ? "Enregistrement…"
                   : isEditing
-                  ? "Mettre à jour"
-                  : "Enregistrer"}
+                    ? "Mettre à jour"
+                    : "Enregistrer"}
               </button>
               <button
                 type="button"
@@ -681,9 +681,9 @@ export default function ProductsPage() {
                 <div className="prod-card-image">
                   {product.image_url ? (
                     <img
-  src={`${product.image_url}?v=${Date.now()}`}
-  alt={product.name}
-  />
+                      src={`${product.image_url}?v=${Date.now()}`}
+                      alt={product.name}
+                    />
                   ) : (
                     <div className="prod-card-image-placeholder">Pas d'image</div>
                   )}
@@ -721,7 +721,13 @@ export default function ProductsPage() {
                   </button>
                   <button
                     className="prod-btn-ghost"
-                    onClick={() => startEditProduct(product)}
+                    onClick={() => {
+                      startEditProduct(product);
+                      window.scrollTo({
+                        top: 0,
+                        behavior: "smooth",
+                      });
+                    }}
                   >
                     Modifier
                   </button>
