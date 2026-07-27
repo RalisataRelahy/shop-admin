@@ -233,7 +233,7 @@ export default function OrdersDashboard(): React.JSX.Element {
     setUpdatingId(orderId);
     const { error } = await supabase
       .from('orders')
-      .update({ statut: newStatus })
+      .update({ statut: newStatus, updated_at: new Date().toISOString() })
       .eq('id', orderId);
 
     if (error) {
@@ -720,7 +720,7 @@ const styles: Record<string, React.CSSProperties> = {
   statusBadgeNonConfirmer: {
     fontSize: 15,
     fontWeight: 900,
-    padding: '3px 250px',
+    padding: '3px 35%',
     borderRadius: 20,
   },
   metaRow: {

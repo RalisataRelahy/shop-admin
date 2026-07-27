@@ -14,7 +14,27 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
 }
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
 
+.cat-drag-handle {
+  font-size: 22px;
+  cursor: grab;
+  user-select: none;
+  color: #777;
+  padding: 8px;
+}
+
+.cat-drag-handle:active {
+  cursor: grabbing;
+}
+
+.cat-row:hover .cat-drag-handle {
+  color: #333;
+}
 .cat-container {
   width: 90%;
   margin: 10px auto; /* auto sur les côtés = centrage horizontal */
