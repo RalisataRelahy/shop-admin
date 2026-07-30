@@ -64,9 +64,7 @@ export default function SortableCategory({
         title="Déplacer"
       >
         ☰
-      </div>
-
-      {isEditing ? (
+        {isEditing ? (
         <input
           className="cat-edit-input"
           autoFocus
@@ -85,7 +83,6 @@ export default function SortableCategory({
       ) : (
         <span className="cat-name">
           {category.name}
-
           {!isActive && (
             <span className="cat-badge">
               Désactivée
@@ -93,6 +90,8 @@ export default function SortableCategory({
           )}
         </span>
       )}
+      </div>
+
 
       <div className="cat-actions">
         {isEditing ? (

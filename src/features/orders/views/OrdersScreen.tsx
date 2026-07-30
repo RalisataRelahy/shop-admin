@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '../../../supabase/config';
 import { IoChevronDown, IoChevronUp } from 'react-icons/io5';
@@ -155,6 +155,7 @@ export default function OrdersDashboard(): React.JSX.Element {
   const [activeFilter, setActiveFilter] = useState<OrderStatus | 'all'>('all');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isAlarmDialogOpen, setIsAlarmDialogOpen] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -196,10 +197,34 @@ export default function OrdersDashboard(): React.JSX.Element {
     if (error || !data) return null;
     return data as unknown as Order;
   };
+  const alarmRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    fetchOrders();
+    alarmRef.current = new Audio("/sounds/alarm.mp3");
+    alarmRef.current.loop = true;
 
+    return () => {
+      alarmRef.current?.pause();
+      alarmRef.current = null;
+    };
+  }, []);
+  const startAlarm = async () => {
+  try {
+    await alarmRef.current?.play();
+  } catch (e) {
+    console.error("Impossible de jouer le son :", e);
+  }
+};
+
+const stopAlarm = () => {
+  if (alarmRef.current) {
+    alarmRef.current.pause();
+    alarmRef.current.currentTime = 0;
+  }
+  setIsAlarmDialogOpen(false);
+};
+  useEffect(() => {
+    fetchOrders();
     const ordersSubscription = supabase
       .channel('table-db-changes')
       .on(
@@ -208,7 +233,11 @@ export default function OrdersDashboard(): React.JSX.Element {
         async (payload: RealtimePostgresChangesPayload<Order>) => {
           if (payload.eventType === 'INSERT' && payload.new) {
             const fullOrder = await fetchOrderWithItems((payload.new as Order).id);
-            if (fullOrder) setOrders((prev) => [fullOrder, ...prev]);
+            if (fullOrder){
+              startAlarm();
+              setIsAlarmDialogOpen(true);
+              setOrders((prev) => [fullOrder, ...prev]);
+            };
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedId = (payload.new as Order).id;
             const fullOrder = await fetchOrderWithItems(updatedId);
@@ -369,6 +398,8 @@ export default function OrdersDashboard(): React.JSX.Element {
           onConfirm={confirmDelete}
         />
       )}
+
+      {isAlarmDialogOpen && <AlarmDialog onStop={stopAlarm} />}
     </div>
   );
 }
@@ -434,7 +465,14 @@ function OrderCard({
   const itemCount = items.reduce((sum, it) => sum + it.quantity, 0);
 
   return (
-    <div className="order-card" style={{ ...styles.card, borderLeft: `4px solid ${meta.color}` }}>
+    <div
+      className="order-card"
+      style={{
+        ...styles.card,
+        backgroundColor: order.statut === 'non_confirmer' ? '#df3434' : '#FFFFFF',
+        borderLeft: `4px solid ${meta.color}`,
+      }}
+    >
       <div style={styles.cardBody}>
         <div style={styles.cardMain}>
           <div style={styles.cardTopRow}>
@@ -589,6 +627,27 @@ function ConfirmDialog({
           </button>
           <button style={styles.dialogConfirm} onClick={onConfirm}>
             Supprimer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlarmDialog({ onStop }: { onStop: () => void }) {
+  return (
+    <div style={styles.overlay} role="presentation">
+      <div style={styles.dialog} role="alertdialog" aria-modal="true" aria-labelledby="alarm-dialog-title">
+        <p id="alarm-dialog-title" style={styles.dialogText}>
+          Nouvelle commande reçue. Arrêtez l’alarme une fois la commande prise en compte.
+        </p>
+        <div style={styles.dialogActions}>
+          <button
+            style={{ ...styles.dialogConfirm, backgroundColor: COLORS.appleGreenDark }}
+            onClick={onStop}
+            autoFocus
+          >
+            Arrêter l’alarme
           </button>
         </div>
       </div>

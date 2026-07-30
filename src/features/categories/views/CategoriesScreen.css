@@ -23,6 +23,7 @@
 .cat-drag-handle {
   font-size: 22px;
   cursor: grab;
+  display:flex;
   user-select: none;
   color: #777;
   padding: 8px;
@@ -147,6 +148,7 @@
 .cat-name {
   font-size: 18px;
   color: var(--cat-text);
+  padding: 5px;
   display: flex;
   align-items: center;
   gap: 8px;
