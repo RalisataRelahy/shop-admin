@@ -240,10 +240,15 @@ alarmRef.current.muted = false;
     };
   }, []);
   const startAlarm = async () => {
-    console.log("startAlarm appelé");
+    console.log("startAlarm", {
+    unlocked: audioUnlocked.current,
+    audio: !!alarmRef.current,
+  });
      if (!audioUnlocked.current) return;
   try {
     alarmRef.current!.currentTime = 0;
+    alarmRef.current!.volume = 1;
+    alarmRef.current!.muted = false;
     await alarmRef.current?.play();
   } catch (e) {
     console.error("Impossible de jouer le son :", e);
