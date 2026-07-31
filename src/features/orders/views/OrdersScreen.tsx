@@ -145,7 +145,7 @@ function formatDate(iso: string): string {
     return iso;
   }
 }
-
+import alarmSound from "../../../assets/sounds/alarm.mp3";
 // ============================================================================
 // COMPOSANT PRINCIPAL
 // ============================================================================
@@ -198,18 +198,50 @@ export default function OrdersDashboard(): React.JSX.Element {
     return data as unknown as Order;
   };
   const alarmRef = useRef<HTMLAudioElement | null>(null);
-
+  const audioUnlocked = useRef(false);
   useEffect(() => {
-    alarmRef.current = new Audio("/sounds/alarm.mp3");
+    alarmRef.current = new Audio(alarmSound);
+    console.log(alarmRef.current.src);
+    alarmRef.current.oncanplaythrough = () => {
+    console.log("Audio chargé");
+  };
+  alarmRef.current.onerror = (e) => {
+    console.log("Erreur audio", e);
+  };
+  alarmRef.current.volume = 1;
+alarmRef.current.muted = false;
     alarmRef.current.loop = true;
+    const unlockAudio = async () => {
+    if (!alarmRef.current || audioUnlocked.current) return;
 
+    try {
+      alarmRef.current.volume = 0;
+
+      await alarmRef.current.play();
+
+      alarmRef.current.pause();
+      alarmRef.current.currentTime = 0;
+      alarmRef.current.volume = 1;
+
+      audioUnlocked.current = true;
+
+      console.log("Audio débloqué");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  window.addEventListener("click", unlockAudio, { once: true });
     return () => {
       alarmRef.current?.pause();
       alarmRef.current = null;
     };
   }, []);
   const startAlarm = async () => {
+    console.log("startAlarm appelé");
+     if (!audioUnlocked.current) return;
   try {
+    alarmRef.current!.currentTime = 0;
     await alarmRef.current?.play();
   } catch (e) {
     console.error("Impossible de jouer le son :", e);
