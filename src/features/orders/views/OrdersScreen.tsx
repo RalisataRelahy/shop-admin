@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '../../../supabase/config';
 import { IoChevronDown, IoChevronUp } from 'react-icons/io5';
@@ -198,104 +198,162 @@ export default function OrdersDashboard(): React.JSX.Element {
     return data as unknown as Order;
   };
   const alarmRef = useRef<HTMLAudioElement | null>(null);
-  const audioUnlocked = useRef(false);
-  useEffect(() => {
-    alarmRef.current = new Audio(alarmSound);
-    console.log(document.hasFocus());
-    console.log(navigator.userActivation?.hasBeenActive);
-    console.log(alarmRef.current.src);
-    alarmRef.current.oncanplaythrough = () => {
+const audioUnlocked = useRef(false);
+
+useEffect(() => {
+  const audio = new Audio(alarmSound);
+
+  audio.loop = true;
+  audio.volume = 1;
+  audio.muted = false;
+
+  alarmRef.current = audio;
+
+  console.log("Audio source:", audio.src);
+
+  audio.oncanplaythrough = () => {
     console.log("Audio chargé");
   };
-  alarmRef.current.onerror = (e) => {
-    console.log("Erreur audio", e);
+
+  audio.onerror = (e) => {
+    console.error("Erreur audio:", e);
   };
-  alarmRef.current.volume = 1;
-alarmRef.current.muted = false;
-    alarmRef.current.loop = true;
-    const unlockAudio = async () => {
+
+
+  const unlockAudio = async () => {
     if (!alarmRef.current || audioUnlocked.current) return;
 
     try {
-      alarmRef.current.volume = 0;
+      const audio = alarmRef.current;
 
-      await alarmRef.current.play();
+      audio.volume = 0;
 
-      alarmRef.current.pause();
-      alarmRef.current.currentTime = 0;
-      alarmRef.current.volume = 1;
+      await audio.play();
+
+      audio.pause();
+      audio.currentTime = 0;
+
+      audio.volume = 1;
 
       audioUnlocked.current = true;
 
       console.log("Audio débloqué");
-    } catch (e) {
-      console.error(e);
+
+    } catch (error) {
+      console.error("Erreur unlock audio:", error);
     }
   };
 
+
   window.addEventListener("click", unlockAudio, { once: true });
-    return () => {
-      alarmRef.current?.pause();
-      alarmRef.current = null;
-    };
-  }, []);
-  const startAlarm = async () => {
-    console.log("startAlarm", {
+
+
+  return () => {
+    window.removeEventListener("click", unlockAudio);
+
+    audio.pause();
+    audio.currentTime = 0;
+
+    alarmRef.current = null;
+  };
+
+}, []);
+
+
+
+const startAlarm = useCallback(async () => {
+
+  const audio = alarmRef.current;
+
+  console.log("startAlarm", {
     unlocked: audioUnlocked.current,
-    audio: !!alarmRef.current,
+    audioExists: !!audio,
   });
-     if (!audioUnlocked.current) return;
+
+
+  if (!audio || !audioUnlocked.current) {
+    console.warn("Audio non prêt");
+    return;
+  }
+
+
   try {
-    alarmRef.current!.currentTime = 0;
-    alarmRef.current!.volume = 1;
-    alarmRef.current!.muted = false;
-    await alarmRef.current?.play();
-  } catch (e) {
-    console.error("Impossible de jouer le son :", e);
-  }
-};
+    audio.currentTime = 0;
+    audio.volume = 1;
+    audio.muted = false;
 
-const stopAlarm = () => {
-  if (alarmRef.current) {
-    alarmRef.current.pause();
-    alarmRef.current.currentTime = 0;
+    await audio.play();
+
+    console.log("Alarme lancée");
+
+  } catch (error) {
+    console.error("Impossible de jouer le son :", error);
   }
+
+}, []);
+
+
+const stopAlarm = useCallback(() => {
+
+  const audio = alarmRef.current;
+
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+
   setIsAlarmDialogOpen(false);
-};
-  useEffect(() => {
-    fetchOrders();
-    const ordersSubscription = supabase
-      .channel('table-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: ORDERS_TABLE },
-        async (payload: RealtimePostgresChangesPayload<Order>) => {
-          if (payload.eventType === 'INSERT' && payload.new) {
-            const fullOrder = await fetchOrderWithItems((payload.new as Order).id);
-            if (fullOrder){
-              startAlarm();
-              setIsAlarmDialogOpen(true);
-              setOrders((prev) => [fullOrder, ...prev]);
-            };
-          } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const updatedId = (payload.new as Order).id;
-            const fullOrder = await fetchOrderWithItems(updatedId);
-            if (fullOrder) {
-              setOrders((prev) => prev.map((order) => (order.id === updatedId ? fullOrder : order)));
-            }
-          } else if (payload.eventType === 'DELETE' && payload.old) {
-            const deletedOrderId = payload.old.id;
-            setOrders((prev) => prev.filter((order) => order.id !== deletedOrderId));
+
+}, []);
+ useEffect(() => {
+
+  fetchOrders();
+
+
+  const ordersSubscription = supabase
+    .channel("table-db-changes")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: ORDERS_TABLE,
+      },
+      async (payload) => {
+
+        if (payload.eventType === "INSERT" && payload.new) {
+
+          const fullOrder = await fetchOrderWithItems(
+            (payload.new as Order).id
+          );
+
+
+          if (fullOrder) {
+
+            await startAlarm();
+
+            setIsAlarmDialogOpen(true);
+
+            setOrders((prev) => [
+              fullOrder,
+              ...prev,
+            ]);
+
           }
+
         }
-      )
-      .subscribe();
 
-    return () => {
-      supabase.removeChannel(ordersSubscription);
-    };
-  }, []);
+      }
+    )
+    .subscribe();
 
+
+  return () => {
+    supabase.removeChannel(ordersSubscription);
+  };
+
+
+}, [startAlarm]);
   // --- UPDATE : changement de statut ---
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus): Promise<void> => {
     setUpdatingId(orderId);
