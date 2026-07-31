@@ -201,6 +201,8 @@ export default function OrdersDashboard(): React.JSX.Element {
   const audioUnlocked = useRef(false);
   useEffect(() => {
     alarmRef.current = new Audio(alarmSound);
+    console.log(document.hasFocus());
+    console.log(navigator.userActivation?.hasBeenActive);
     console.log(alarmRef.current.src);
     alarmRef.current.oncanplaythrough = () => {
     console.log("Audio chargé");
