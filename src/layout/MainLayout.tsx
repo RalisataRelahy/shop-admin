@@ -4,6 +4,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography }
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import alarmSound from '../assets/sounds/alarm.mp3';
+import beepSound from '../assets/sounds/beep.mp3';
 import SideBar from './components/SideBar';
 import './MainLayout.css';
 import { useCallRequestContext } from '../context/CallRequestContext';
@@ -25,6 +26,7 @@ export default function MainLayout() {
   const activeOrderAlert = orderAlerts[0];
   const knownCallRequestIds = useRef(new Set<string>());
   const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const beepRef = useRef<HTMLAudioElement | null>(null);
   const audioUnlockedRef = useRef(false);
 
   const unlockAudio = useCallback(async () => {
@@ -62,10 +64,27 @@ export default function MainLayout() {
     alarm.currentTime = 0;
   }, []);
 
+  const playBeep = useCallback(async () => {
+    const beep = beepRef.current;
+    console.log('Bip called');
+    if (!beep || !audioUnlockedRef.current) return;
+
+    try {
+      beep.currentTime = 0;
+      await beep.play();
+    } catch {
+      // Une nouvelle interaction utilisateur permettra de réessayer.
+    }
+  }, []);
+
   useEffect(() => {
     const alarm = new Audio(alarmSound);
     alarm.loop = true;
     alarmRef.current = alarm;
+
+    const beep = new Audio(beepSound);
+    beep.loop = false;
+    beepRef.current = beep;
 
     const enableAudio = () => void unlockAudio();
     window.addEventListener('pointerdown', enableAudio, { once: true });
@@ -75,7 +94,9 @@ export default function MainLayout() {
       window.removeEventListener('pointerdown', enableAudio);
       window.removeEventListener('keydown', enableAudio);
       alarm.pause();
+      beep.pause();
       alarmRef.current = null;
+      beepRef.current = null;
     };
   }, [unlockAudio]);
 
@@ -89,15 +110,16 @@ export default function MainLayout() {
       knownCallRequestIds.current.add(request.id);
       showCallRequest(request);
       openCallDialog();
-      toast.info('📞 Nouvelle demande de rappel');
+      void playBeep();
+      toast.info('Nouvelle demande de rappel');
     },
-    [openCallDialog, showCallRequest]
+    [openCallDialog, showCallRequest, playBeep]
   );
 
   const handleNewOrder = useCallback(
     (order: NewOrder) => {
       setOrderAlerts((current) => [...current, order]);
-      toast.info(`🛍️ Nouvelle commande${order.client_name ? ` de ${order.client_name}` : ''}`, {
+      toast.info(`Nouvelle commande${order.client_name ? ` de ${order.client_name}` : ''}`, {
         onClick: () => navigate('/commandes'),
       });
     },

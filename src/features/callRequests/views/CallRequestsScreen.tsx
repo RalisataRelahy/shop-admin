@@ -50,7 +50,12 @@ export default function CallRequestsScreen() {
     void loadRequests();
     const channel = supabase
       .channel("call-requests-page")
-      .on("postgres_changes", { event: "*", schema: "public", table: "call_requests" }, () => void loadRequests())
+      .on("postgres_changes", { 
+        event: "*", 
+        schema: "public", 
+        table: "call_requests" 
+      }, 
+      () => void loadRequests())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [loadRequests]);

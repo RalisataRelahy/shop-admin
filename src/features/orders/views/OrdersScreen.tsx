@@ -49,6 +49,7 @@ export interface Order {
   user_id: string;
   statut: OrderStatus;
   delivery_mode: 'pickup' | 'delivery' | string;
+  delivery_address:string;
   notes: string | null;
   payment_method: 'mobile_money' | 'especes' | string;
   total_price: number;
@@ -606,14 +607,19 @@ const OrderCard = React.memo(function OrderCard({
               {meta.label}
             </span>
           </div>
-
+              
           <div style={styles.metaGrid}>
             <MetaItem label="Client" value={order.client_name} />
             <MetaItem label="Téléphone" value={order.client_phone} />
             <MetaItem label="Total" value={formatPrice(order.total_price)} emphasize />
+          
             <MetaItem
               label="Récupération"
-              value={DELIVERY_MODE_LABEL[order.delivery_mode] ?? order.delivery_mode}
+              value={
+                order.delivery_mode === 'delivery'
+                  ? `${DELIVERY_MODE_LABEL[order.delivery_mode]} - ${order.delivery_address}`
+                  : DELIVERY_MODE_LABEL[order.delivery_mode] ?? order.delivery_mode
+              }
             />
             <MetaItem
               label="Paiement"
@@ -967,8 +973,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.textDark,
     fontWeight: 500,
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    // textOverflow: 'ellipsis',
+    whiteSpace: 'normal',
   },
   metaValueStrong: { color: COLORS.appleGreenDark, fontWeight: 700 },
   notes: {
