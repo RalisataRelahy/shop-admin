@@ -11,7 +11,8 @@ const listBtn = [
     { name: "Gestion Catégories-plats", path: "/categories" },
     { name: "Gestion Menu", path: "/menu" },
     {name:"Gestion des combos", path:"/combo"},
-    { name: "Gestion Clients", path: "/clients" }
+    { name: "Gestion Clients", path: "/clients" },
+    { name: "Demandes de rappel", path: "/demandes-rappel" }
 ];
 
 export default function SideBar() {

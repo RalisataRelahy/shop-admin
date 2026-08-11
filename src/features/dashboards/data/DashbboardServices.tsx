@@ -16,9 +16,16 @@ export interface RecentOrder {
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id,total_price,statut");
+    .select("id,total_price,statut")
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error(error);
@@ -35,6 +42,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function getRecentOrders(): Promise<RecentOrder[]> {
+    const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
   const { data, error } = await supabase
     .from("orders")
     .select(

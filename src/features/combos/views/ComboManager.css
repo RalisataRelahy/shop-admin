@@ -20,7 +20,7 @@
 /* ---------- Layout général ---------- */
 
 .page {
-  max-width: 780px;
+  max-width: 90%;
   margin: 0 auto;
   padding: 24px 16px 64px;
   color: var(--combo-text);

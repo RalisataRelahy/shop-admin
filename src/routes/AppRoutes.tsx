@@ -11,6 +11,7 @@ import CategoriesScreen from "../features/categories/views/CategoriesScreen";
 import ProductsScreen from "../features/products/views/ProductsScreen";
 import ClientScreen from "../features/clients/views/Client";
 import AddComboPackPage from "../features/combos/views/ComboManager";
+import CallRequestsScreen from "../features/callRequests/views/CallRequestsScreen";
 
 export default function AppRoutes() {
   return (
@@ -33,6 +34,7 @@ export default function AppRoutes() {
           <Route path="/combo" element={<AddComboPackPage/>}/>
           <Route path="/menu" element={<ProductsScreen />} />
           <Route path="/clients" element={<ClientScreen />} />
+          <Route path="/demandes-rappel" element={<CallRequestsScreen />} />
         </Route>
 
         <Route path="*" element={<h1>404 - Page introuvable</h1>} />

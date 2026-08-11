@@ -136,7 +136,7 @@ export default function Dashboard() {
                 value={`${new Intl.NumberFormat("fr-FR").format(stats.totalSales)} Ar`}
                 accent="green"
               />
-              <StatCard title="Commandes" value={stats.totalOrders} accent="neutral" />
+              <StatCard title="Commandes totales" value={stats.totalOrders} accent="neutral" />
               <StatCard
                 title="En attente"
                 value={stats.pendingOrders}
