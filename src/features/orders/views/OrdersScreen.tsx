@@ -585,15 +585,23 @@ const OrderCard = React.memo(function OrderCard({
       className="order-card"
       style={{
         ...styles.card,
-        borderLeft: `4px solid ${meta.color}`,
-        borderColor: isUrgent ? '#F3C3BE' : COLORS.midGray,
+        borderLeft: `6px solid ${isUrgent ? COLORS.urgent : meta.color}`,
+        borderColor: isUrgent ? '#f96653' : COLORS.midGray,
+        backgroundColor: isUrgent ? '#f3b0a7' : '#FFFFFF',
+        boxShadow: isUrgent ? '0 0 0 1px rgba(223, 15, 0, 0.7), 0 10px 24px rgba(255, 17, 0, 0.6)' : undefined,
       }}
     >
       <div style={styles.cardBody}>
         <div style={styles.cardMain}>
           <div style={styles.cardTopRow}>
             <span style={styles.orderId}>#{order.id.slice(0, 8)}</span>
-            <span style={{ ...styles.statusBadge, color: meta.color, backgroundColor: meta.bg }}>
+            <span
+              style={{
+                ...styles.statusBadge,
+                color: isUrgent ? COLORS.urgent : meta.color,
+                backgroundColor: isUrgent ? '#FDE4E2' : meta.bg,
+              }}
+            >
               {isUrgent && <span className="urgent-dot" style={styles.urgentDot} />}
               {meta.label}
             </span>
