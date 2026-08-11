@@ -4,12 +4,12 @@
   --pg-border: #e8e2d3;
   --pg-text: #1e2a1b;
   --pg-text-muted: #71786c;
-  --pg-primary: #19a41c;
-  --pg-primary-dark: #229320;
+  --pg-primary: #128171;
+  --pg-primary-dark: #128171;
   --pg-amber: #c98a1f;
   --pg-radius-md: 14px;
-  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(25, 164, 28, 0.06);
-  --pg-shadow-hover: 0 10px 26px rgba(25, 164, 28, 0.1);
+  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(18, 129, 113, 0.06);
+  --pg-shadow-hover: 0 10px 26px rgba(18, 129, 113, 0.1);
 }
 
 .stat-card {

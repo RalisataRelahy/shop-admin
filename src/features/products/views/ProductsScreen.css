@@ -16,9 +16,9 @@
   --pg-text-muted: #71786c;
   --pg-text-faint: #a4a99b;
 
-  --pg-primary: #19a41c;
-  --pg-primary-dark: #229320;
-  --pg-primary-bg: #eaf7ea;
+  --pg-primary: #128171;
+  --pg-primary-dark: #128171;
+  --pg-primary-bg: rgba(18, 129, 113, 0.12);
 
   --pg-danger: #d64545;
   --pg-danger-bg: #fbecec;
@@ -28,8 +28,8 @@
   --pg-radius-lg: 20px;
   --pg-radius-pill: 999px;
 
-  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(25, 164, 28, 0.06);
-  --pg-shadow-hover: 0 10px 28px rgba(25, 164, 28, 0.12);
+  --pg-shadow-soft: 0 1px 2px rgba(30, 42, 27, 0.04), 0 6px 20px rgba(18, 129, 113, 0.06);
+  --pg-shadow-hover: 0 10px 28px rgba(18, 129, 113, 0.12);
 
   --pg-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif;
 }
@@ -96,7 +96,7 @@
 .prod-btn-primary {
   background: var(--pg-primary);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(25, 164, 28, 0.22);
+  box-shadow: 0 4px 14px rgba(18, 129, 113, 0.22);
 }
 
 .prod-btn-primary:hover:not(:disabled) {

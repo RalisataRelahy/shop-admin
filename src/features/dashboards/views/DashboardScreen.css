@@ -4,8 +4,8 @@
   --pg-border: #e8e2d3;
   --pg-text: #1e2a1b;
   --pg-text-muted: #71786c;
-  --pg-primary: #19a41c;
-  --pg-primary-dark: #229320;
+  --pg-primary: #128171;
+  --pg-primary-dark: #128171;
   --pg-danger: #d64545;
   --pg-danger-bg: #fbecec;
   --pg-radius-md: 14px;
@@ -74,10 +74,10 @@
 @keyframes pg-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(25, 164, 28, 0.35);
+    box-shadow: 0 0 0 0 rgba(18, 129, 113, 0.35);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(25, 164, 28, 0);
+    box-shadow: 0 0 0 5px rgba(18, 129, 113, 0);
   }
 }
 

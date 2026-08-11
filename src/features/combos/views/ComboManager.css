@@ -7,8 +7,8 @@
   --combo-border: #e5e7eb;
   --combo-text: #111827;
   --combo-text-muted: #6b7280;
-  --combo-primary: #16a34a;
-  --combo-primary-hover: #15803d;
+  --combo-primary: #128171;
+  --combo-primary-hover: #128171;
   --combo-secondary: #eef0f3;
   --combo-secondary-hover: #e2e5e9;
   --combo-danger: #dc2626;
@@ -80,7 +80,7 @@
 .field input:focus,
 .field textarea:focus {
   border-color: var(--combo-primary);
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  box-shadow: 0 0 0 3px rgba(18, 129, 113, 0.15);
 }
 
 .field textarea {

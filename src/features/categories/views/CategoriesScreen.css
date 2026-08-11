@@ -4,9 +4,9 @@
   --cat-border: #e4e7ea;
   --cat-text: #2b2f33;
   --cat-text-muted: #8a9096;
-  --cat-green: #7cb342;
-  --cat-green-dark: #5c9231;
-  --cat-green-soft: #eef6e7;
+  --cat-green: #128171;
+  --cat-green-dark: #128171;
+  --cat-green-soft: rgba(18, 129, 113, 0.12);
   --cat-danger: #d64545;
   --cat-danger-soft: #fcebeb;
   min-height: 100vh;

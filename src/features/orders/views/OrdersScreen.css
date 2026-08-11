@@ -14,7 +14,7 @@
 }
 
 .order-item.is-flashing {
-  background-color: #ecfdf5;
+  background-color: rgba(18, 129, 113, 0.12);
   transform: scale(1.01);
 }
 
@@ -204,8 +204,8 @@
 }
 
 .status-pill.livrée {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(18, 129, 113, 0.12);
+  color: #128171;
 }
 
 .status-pill.annulée {
@@ -238,7 +238,7 @@
 
 .action-btn {
   border: none;
-  background: #21b65a;
+  background: #128171;
   color: #fff;
   border-radius: 8px;
   padding: 8px 10px;

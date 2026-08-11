@@ -120,7 +120,7 @@ const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: strin
   'reçue': { label: 'Reçue', color: '#4A6FA5', bg: '#E9F0F9' },
   en_preparation: { label: 'En préparation', color: '#B8791F', bg: '#FBF0DF' },
   en_cours_de_livraison: { label: 'En livraison', color: '#5B57A6', bg: '#ECEBF7' },
-  livree: { label: 'Livrée', color: '#3E6E1F', bg: '#E3EEDA' },
+  livree: { label: 'Livrée', color: '#128171', bg: '#EAF6F4' },
   annulee: { label: 'Annulée', color: '#8A8D85', bg: '#EEEEEC' },
 };
 
@@ -135,8 +135,8 @@ const PAYMENT_LABEL: Record<string, string> = {
 };
 
 const COLORS = {
-  appleGreen: '#7CBB3F',
-  appleGreenDark: '#5C9A2C',
+  appleGreen: '#128171',
+  appleGreenDark: '#128171',
   lightGray: '#F1F2F0',
   midGray: '#DEE0DB',
   offWhite: '#FAF8F4',
