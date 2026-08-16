@@ -56,8 +56,32 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 32px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
+}
+
+.prod-search-wrap {
+  margin-bottom: 24px;
+}
+
+.prod-search-input {
+  width: min(100%, 420px);
+  height: 46px;
+  border: 1px solid var(--pg-border-strong);
+  border-radius: 14px;
+  background: var(--pg-surface);
+  color: var(--pg-text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 0 16px;
+  outline: none;
+  box-shadow: var(--pg-shadow-soft);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prod-search-input:focus {
+  border-color: var(--pg-primary);
+  box-shadow: 0 0 0 3px var(--pg-primary-bg);
 }
 
 .prod-title {

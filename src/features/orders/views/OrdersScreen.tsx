@@ -166,11 +166,23 @@ function formatDate(iso: string): string {
 
 function matchesSearch(order: Order, query: string): boolean {
   if (!query) return true;
+
   const q = query.trim().toLowerCase();
+  const itemNames = (order.order_items ?? [])
+    .map((item) => {
+      if (item.combo_id && item.combo) return item.combo.name ?? '';
+      if (item.product_id && item.menu) return item.menu.name ?? '';
+      return '';
+    })
+    .join(' ')
+    .toLowerCase();
+
   return (
     order.id.toLowerCase().includes(q) ||
     (order.client_name ?? '').toLowerCase().includes(q) ||
-    (order.client_phone ?? '').toLowerCase().includes(q)
+    (order.client_phone ?? '').toLowerCase().includes(q) ||
+    (order.notes ?? '').toLowerCase().includes(q) ||
+    itemNames.includes(q)
   );
 }
 

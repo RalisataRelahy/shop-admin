@@ -69,6 +69,7 @@ export default function ProductsPage() {
   const [dragActive, setDragActive] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // --- Edition ---
   const [editingProduct, setEditingProduct] = useState<ProductsModel | null>(
@@ -455,6 +456,23 @@ export default function ProductsPage() {
     loadProducts();
   };
 
+  const filteredProducts = products.filter((product) => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.trim().toLowerCase();
+    const category = categoryName(product.category_id).toLowerCase();
+    const variantNames = product.product_variants
+      ?.map((variant) => variant.name.toLowerCase())
+      .join(" ") ?? "";
+
+    return (
+      product.name.toLowerCase().includes(query) ||
+      category.includes(query) ||
+      variantNames.includes(query) ||
+      product.description.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="prod-page">
       <div className="prod-container">
@@ -480,6 +498,17 @@ export default function ProductsPage() {
         </div>
 
         {errorMessage && <div className="prod-error">{errorMessage}</div>}
+
+        <div className="prod-search-wrap">
+          <input
+            type="text"
+            className="prod-search-input"
+            placeholder="Rechercher un plat, une catégorie ou une variante"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Rechercher un plat"
+          />
+        </div>
 
         {showForm && (
           <div className="prod-form">
@@ -670,10 +699,14 @@ export default function ProductsPage() {
         <div className="prod-grid">
           {loading ? (
             <p className="prod-empty">Chargement…</p>
-          ) : products.length === 0 ? (
-            <p className="prod-empty">Aucun produit pour l'instant.</p>
+          ) : filteredProducts.length === 0 ? (
+            <p className="prod-empty">
+              {searchQuery
+                ? "Aucun produit ne correspond à votre recherche."
+                : "Aucun produit pour l'instant."}
+            </p>
           ) : (
-            products.map((product) => (
+            filteredProducts.map((product) => (
               <div
                 key={product.id}
                 className={`prod-card ${product.is_active ? "" : "inactive"}`}

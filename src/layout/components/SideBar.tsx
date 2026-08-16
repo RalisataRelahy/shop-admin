@@ -13,6 +13,7 @@ const listBtn = [
     {name:"Gestion des combos", path:"/combo"},
     { name: "Gestion Clients", path: "/clients" },
     { name: "Demandes de rappel", path: "/demandes-rappel" },
+
 ];
 
 export default function SideBar() {
