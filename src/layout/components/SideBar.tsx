@@ -13,9 +13,6 @@ const listBtn = [
     {name:"Gestion des combos", path:"/combo"},
     { name: "Gestion Clients", path: "/clients" },
     { name: "Demandes de rappel", path: "/demandes-rappel" },
-    { name: "Politique de confidentialité", path: "/politique-confidentialite" },
-    { name: "Conditions d’utilisation", path: "/conditions-utilisation" },
-    { name: "Licence open source", path: "/licence-open-source" }
 ];
 
 export default function SideBar() {
