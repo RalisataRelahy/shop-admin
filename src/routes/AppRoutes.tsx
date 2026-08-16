@@ -12,6 +12,8 @@ import ProductsScreen from "../features/products/views/ProductsScreen";
 import ClientScreen from "../features/clients/views/Client";
 import AddComboPackPage from "../features/combos/views/ComboManager";
 import CallRequestsScreen from "../features/callRequests/views/CallRequestsScreen";
+import PolitiqueConfidentialite from "../features/legal/views/PolitiqueConfidentialite";
+import ConditionUtilisation from "../features/legal/views/ConditionUtilisation";
 
 export default function AppRoutes() {
   return (
@@ -20,7 +22,8 @@ export default function AppRoutes() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-
+        <Route path="/politique-confidentialite" element={<PolitiqueConfidentialite />} />
+        <Route path="/conditions-utilisation" element={<ConditionUtilisation />} />
         <Route
           element={
             <AuthGuard>
@@ -35,6 +38,7 @@ export default function AppRoutes() {
           <Route path="/menu" element={<ProductsScreen />} />
           <Route path="/clients" element={<ClientScreen />} />
           <Route path="/demandes-rappel" element={<CallRequestsScreen />} />
+ 
         </Route>
 
         <Route path="*" element={<h1>404 - Page introuvable</h1>} />
