@@ -148,6 +148,17 @@ const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: strin
   annulee: { label: 'Annulée', color: '#8A8D85', bg: '#EEEEEC' },
 };
 
+const STATUS_CARD_BG: Record<OrderStatus, string> = {
+  non_confirmer: '#FFFFFF',
+  'reçue': '#FDF2F1',
+  acceptée: '#FFFFFF',
+  en_preparation: '#FBF0DF',
+  prete: '#FFFFFF',
+  en_cours_de_livraison: '#EAF6F4',
+  livree: '#F4F5F2',
+  annulee: '#FFFFFF',
+};
+
 const DELIVERY_MODE_LABEL: Record<string, string> = {
   pickup: 'À récupérer',
   delivery: 'En livraison',
@@ -668,7 +679,7 @@ const OrderCard = React.memo(function OrderCard({
         ...styles.card,
         borderLeft: `5px solid ${isUrgent ? COLORS.urgent : meta.color}`,
         borderColor: isUrgent ? COLORS.urgentBorder : COLORS.midGray,
-        backgroundColor: isUrgent ? COLORS.urgentBg : '#FFFFFF',
+        backgroundColor: isUrgent ? COLORS.urgentBg : STATUS_CARD_BG[order.statut] ?? '#FFFFFF',
       }}
     >
       <div style={styles.cardBody}>
