@@ -5,7 +5,7 @@ import React, {
   useState,
 } from 'react';
 import { supabase } from '../../../supabase/config';
-import { IoChevronDown, IoChevronUp, IoRefresh, IoSearch } from 'react-icons/io5';
+import { IoChevronDown, IoChevronUp, IoRefresh, IoSearch, IoClose } from 'react-icons/io5';
 import { exportOrders } from '../data/ExportData';
 import { Button } from '@mui/material';
 
@@ -17,12 +17,24 @@ import { Button } from '@mui/material';
 //         'en_cours_de_livraison','livree','annulee']
 // Ce tableau ne fait QUE lire, mettre à jour le statut, et supprimer.
 // Aucune création de commande ici (les commandes arrivent côté client).
+//
+// CORRECTIFS APPORTÉS (voir résumé dans la réponse) :
+//  1. Ajout des statuts 'acceptée' et 'prete' manquants du cycle de vie.
+//  2. La requête filtre désormais réellement sur la journée en cours.
+//  3. formatPrice tolère les valeurs numériques renvoyées en string.
+//  4. Fallbacks d'affichage pour les champs client potentiellement null.
+//  5. Rafraîchissement manuel non destructif (plus de flash skeleton).
+//  6. Couleurs de la carte "urgente" alignées sur la palette existante.
+//  7. Action rapide "Annuler" distincte de la suppression définitive.
+//  8. Recherche insensible aux accents.
 // ============================================================================
 
 export type OrderStatus =
   | 'non_confirmer'
   | 'reçue'
+  | 'acceptée'
   | 'en_preparation'
+  | 'prete'
   | 'en_cours_de_livraison'
   | 'livree'
   | 'annulee';
@@ -49,12 +61,12 @@ export interface Order {
   user_id: string;
   statut: OrderStatus;
   delivery_mode: 'pickup' | 'delivery' | string;
-  delivery_address:string;
+  delivery_address: string | null;
   notes: string | null;
   payment_method: 'mobile_money' | 'especes' | string;
   total_price: number;
-  client_phone: string;
-  client_name: string;
+  client_phone: string | null;
+  client_name: string | null;
   created_at: string;
   order_items: OrderItemRow[];
 }
@@ -90,36 +102,47 @@ function resolveItemDisplay(item: OrderItemRow): { name: string; imageUrl: strin
   return { name: 'Article indisponible', imageUrl: null };
 }
 
-// Ordre logique du cycle de vie d'une commande.
+// Ordre logique complet du cycle de vie d'une commande.
 const STATUS_ORDER: OrderStatus[] = [
   'non_confirmer',
   'reçue',
+  'acceptée',
   'en_preparation',
+  'prete',
   'en_cours_de_livraison',
   'livree',
   'annulee',
 ];
 
 // Prochaine étape "naturelle" pour l'action rapide en un clic.
-// `null` = fin de cycle, pas d'action rapide proposée (utiliser le menu déroulant).
+// `undefined` = fin de cycle, pas d'action rapide proposée (utiliser le menu déroulant).
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   non_confirmer: 'reçue',
-  reçue: 'en_preparation',
-  en_preparation: 'en_cours_de_livraison',
+  reçue: 'acceptée',
+  acceptée: 'en_preparation',
+  en_preparation: 'prete',
+  prete: 'en_cours_de_livraison',
   en_cours_de_livraison: 'livree',
 };
 
 const NEXT_ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
   non_confirmer: 'Confirmer',
-  reçue: 'Démarrer la préparation',
-  en_preparation: 'Envoyer en livraison',
+  reçue: 'Accepter',
+  acceptée: 'Démarrer la préparation',
+  en_preparation: 'Marquer prête',
+  prete: 'Envoyer en livraison',
   en_cours_de_livraison: 'Marquer livrée',
 };
+
+// Statuts pour lesquels annuler / supprimer n'a plus de sens.
+const TERMINAL_STATUSES: OrderStatus[] = ['livree', 'annulee'];
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string }> = {
   non_confirmer: { label: 'Non confirmée', color: '#D8281C', bg: '#FDE4E2' },
   'reçue': { label: 'Reçue', color: '#4A6FA5', bg: '#E9F0F9' },
+  acceptée: { label: 'Acceptée', color: '#3E7CB8', bg: '#E7F1FA' },
   en_preparation: { label: 'En préparation', color: '#B8791F', bg: '#FBF0DF' },
+  prete: { label: 'Prête', color: '#8C7C1F', bg: '#F8F3DC' },
   en_cours_de_livraison: { label: 'En livraison', color: '#5B57A6', bg: '#ECEBF7' },
   livree: { label: 'Livrée', color: '#128171', bg: '#EAF6F4' },
   annulee: { label: 'Annulée', color: '#8A8D85', bg: '#EEEEEC' },
@@ -145,10 +168,14 @@ const COLORS = {
   textMuted: '#8A8D85',
   danger: '#C4453C',
   urgent: '#D8281C',
+  urgentBg: '#FDF2F1',
+  urgentBorder: '#F3B3AC',
 };
 
 function formatPrice(value: number): string {
-  return `${value.toLocaleString('fr-FR')} Ar`;
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+  return `${safeValue.toLocaleString('fr-FR')} Ar`;
 }
 
 function formatDate(iso: string): string {
@@ -164,26 +191,37 @@ function formatDate(iso: string): string {
   }
 }
 
-function matchesSearch(order: Order, query: string): boolean {
-  if (!query) return true;
+/** Retire les accents pour une recherche plus tolérante ("recu" -> "reçu"). */
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
 
-  const q = query.trim().toLowerCase();
+function matchesSearch(order: Order, query: string): boolean {
+  if (!query.trim()) return true;
+
+  const q = normalizeText(query.trim());
   const itemNames = (order.order_items ?? [])
     .map((item) => {
       if (item.combo_id && item.combo) return item.combo.name ?? '';
       if (item.product_id && item.menu) return item.menu.name ?? '';
       return '';
     })
-    .join(' ')
-    .toLowerCase();
+    .join(' ');
 
-  return (
-    order.id.toLowerCase().includes(q) ||
-    (order.client_name ?? '').toLowerCase().includes(q) ||
-    (order.client_phone ?? '').toLowerCase().includes(q) ||
-    (order.notes ?? '').toLowerCase().includes(q) ||
-    itemNames.includes(q)
+  const haystack = normalizeText(
+    [
+      order.id,
+      order.client_name ?? '',
+      order.client_phone ?? '',
+      order.notes ?? '',
+      itemNames,
+    ].join(' ')
   );
+
+  return haystack.includes(q);
 }
 
 // ============================================================================
@@ -192,6 +230,7 @@ function matchesSearch(order: Order, query: string): boolean {
 export default function OrdersDashboard(): React.JSX.Element {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<OrderStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -209,8 +248,8 @@ export default function OrdersDashboard(): React.JSX.Element {
     });
   }, []);
 
-  // --- READ : chargement initial (commandes du jour + articles joints) ---
-  const fetchTodayOrders = useCallback(async (): Promise<void> => {
+  // --- READ : chargement des commandes du jour (bornes réellement appliquées) ---
+  const loadOrders = useCallback(async (): Promise<boolean> => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -220,22 +259,32 @@ export default function OrdersDashboard(): React.JSX.Element {
     const { data, error } = await supabase
       .from(ORDERS_TABLE)
       .select(ORDER_SELECT_QUERY)
+      .gte('created_at', startOfDay.toISOString())
+      .lte('created_at', endOfDay.toISOString())
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       setOrders(data as unknown as Order[]);
       setLastSyncedAt(new Date());
       setErrorMessage(null);
-    } else if (error) {
-      setErrorMessage('Impossible de charger les commandes.');
+      return true;
     }
-    setLoading(false);
+    setErrorMessage('Impossible de charger les commandes.');
+    return false;
   }, []);
 
-  const handleManualRefresh = useCallback(() => {
-    setLoading(true);
-    fetchTodayOrders();
-  }, [fetchTodayOrders]);
+  const fetchTodayOrders = useCallback(async (): Promise<void> => {
+    await loadOrders();
+    setLoading(false);
+  }, [loadOrders]);
+
+  // Rafraîchissement manuel : garde la liste actuelle affichée pendant le
+  // rechargement, au lieu de tout remplacer par des skeletons.
+  const handleManualRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadOrders();
+    setRefreshing(false);
+  }, [loadOrders]);
 
   // Le flux temps réel de `orders` ne contient pas les lignes jointes de
   // order_items (Supabase Realtime n'envoie que la table concernée). On
@@ -251,13 +300,12 @@ export default function OrdersDashboard(): React.JSX.Element {
     return data as unknown as Order;
   }, []);
 
-  // --- Audio : déblocage, activation, contrôle de l'alarme ---
   // --- Chargement initial + abonnement temps réel (INSERT / UPDATE / DELETE) ---
   useEffect(() => {
     fetchTodayOrders();
 
     const ordersSubscription = supabase
-      .channel('table-db-changes')
+      .channel(`orders-dashboard-changes`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: ORDERS_TABLE },
@@ -360,7 +408,7 @@ export default function OrdersDashboard(): React.JSX.Element {
     () =>
       orders
         .filter((o) => o.statut !== 'annulee')
-        .reduce((sum, o) => sum + (o.total_price ?? 0), 0),
+        .reduce((sum, o) => sum + (Number(o.total_price) || 0), 0),
     [orders]
   );
 
@@ -368,9 +416,9 @@ export default function OrdersDashboard(): React.JSX.Element {
     <div style={styles.page}>
       <style>{`
         @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(124,187,63,0.45); }
-          70% { box-shadow: 0 0 0 8px rgba(124,187,63,0); }
-          100% { box-shadow: 0 0 0 0 rgba(124,187,63,0); }
+          0% { box-shadow: 0 0 0 0 rgba(18,129,113,0.35); }
+          70% { box-shadow: 0 0 0 8px rgba(18,129,113,0); }
+          100% { box-shadow: 0 0 0 0 rgba(18,129,113,0); }
         }
         @keyframes pulseUrgent {
           0% { box-shadow: 0 0 0 0 rgba(216,40,28,0.35); }
@@ -381,9 +429,13 @@ export default function OrdersDashboard(): React.JSX.Element {
           from { opacity: 0; transform: translateY(6px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
         @media (prefers-reduced-motion: reduce) {
           .order-card, .items-panel { animation: none !important; }
-          .live-dot, .urgent-dot { animation: none !important; }
+          .live-dot, .urgent-dot, .refresh-spin { animation: none !important; }
         }
         .order-card { animation: fadeIn 0.22s ease-out; transition: box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.2s ease; }
         .order-card:hover { box-shadow: 0 4px 14px rgba(46,46,43,0.06); border-color: #D8DAD5; }
@@ -391,9 +443,11 @@ export default function OrdersDashboard(): React.JSX.Element {
         .filter-pill:active { transform: scale(0.97); }
         .icon-btn { transition: background-color 0.15s ease, transform 0.1s ease; }
         .icon-btn:active { transform: scale(0.96); }
+        .icon-btn:hover { background-color: ${COLORS.lightGray}; }
         .primary-action { transition: background-color 0.15s ease, transform 0.1s ease; }
         .primary-action:hover { filter: brightness(1.05); }
         .primary-action:active { transform: scale(0.97); }
+        .text-action:hover { text-decoration: underline; }
         select.status-select { transition: border-color 0.15s ease; }
         select.status-select:hover { border-color: ${COLORS.appleGreen}; }
         .search-input:focus, select.status-select:focus, button:focus-visible {
@@ -402,6 +456,7 @@ export default function OrdersDashboard(): React.JSX.Element {
         }
         .live-dot { animation: pulse 2s infinite; }
         .urgent-dot { animation: pulseUrgent 1.4s infinite; }
+        .refresh-spin { animation: spin 0.7s linear infinite; }
       `}</style>
 
       <header style={styles.header}>
@@ -417,11 +472,12 @@ export default function OrdersDashboard(): React.JSX.Element {
             <button
               className="icon-btn"
               onClick={handleManualRefresh}
+              disabled={refreshing}
               style={styles.refreshBtn}
               aria-label="Actualiser les commandes"
               title="Actualiser"
             >
-              <IoRefresh size={14} />
+              <IoRefresh size={14} className={refreshing ? 'refresh-spin' : undefined} />
             </button>
           </div>
         </div>
@@ -433,7 +489,7 @@ export default function OrdersDashboard(): React.JSX.Element {
 
           <div style={styles.totalBadge}>
             <span style={styles.totalNumber}>{orders.length}</span>
-            <span style={styles.totalLabel}>commande{orders.length > 1 ? 's' : ''}</span>
+            <span style={styles.totalLabel}>commande{orders.length > 1 ? 's' : ''} aujourd'hui</span>
           </div>
 
           <div style={styles.totalBadge}>
@@ -463,6 +519,17 @@ export default function OrdersDashboard(): React.JSX.Element {
             style={styles.searchInput}
             aria-label="Rechercher une commande"
           />
+          {searchQuery && (
+            <button
+              className="icon-btn"
+              onClick={() => setSearchQuery('')}
+              style={styles.searchClearBtn}
+              aria-label="Effacer la recherche"
+              title="Effacer"
+            >
+              <IoClose size={14} />
+            </button>
+          )}
         </div>
 
         <div style={styles.filterBar}>
@@ -503,7 +570,7 @@ export default function OrdersDashboard(): React.JSX.Element {
           </p>
         </div>
       ) : (
-        <div style={styles.list}>
+        <div style={styles.list} aria-busy={refreshing}>
           {filteredOrders.map((order) => (
             <OrderCard
               key={order.id}
@@ -590,6 +657,7 @@ const OrderCard = React.memo(function OrderCard({
   const items = order.order_items ?? [];
   const itemCount = items.reduce((sum, it) => sum + it.quantity, 0);
   const isUrgent = order.statut === 'non_confirmer';
+  const isTerminal = TERMINAL_STATUSES.includes(order.statut);
   const nextStatus = NEXT_STATUS[order.statut];
   const nextLabel = NEXT_ACTION_LABEL[order.statut];
 
@@ -598,10 +666,9 @@ const OrderCard = React.memo(function OrderCard({
       className="order-card"
       style={{
         ...styles.card,
-        borderLeft: `6px solid ${isUrgent ? COLORS.urgent : meta.color}`,
-        borderColor: isUrgent ? '#f96653' : COLORS.midGray,
-        backgroundColor: isUrgent ? '#f3b0a7' : '#FFFFFF',
-        boxShadow: isUrgent ? '0 0 0 1px rgba(223, 15, 0, 0.7), 0 10px 24px rgba(255, 17, 0, 0.6)' : undefined,
+        borderLeft: `5px solid ${isUrgent ? COLORS.urgent : meta.color}`,
+        borderColor: isUrgent ? COLORS.urgentBorder : COLORS.midGray,
+        backgroundColor: isUrgent ? COLORS.urgentBg : '#FFFFFF',
       }}
     >
       <div style={styles.cardBody}>
@@ -611,25 +678,25 @@ const OrderCard = React.memo(function OrderCard({
             <span
               style={{
                 ...styles.statusBadge,
-                color: isUrgent ? COLORS.urgent : meta.color,
-                backgroundColor: isUrgent ? '#FDE4E2' : meta.bg,
+                color: meta.color,
+                backgroundColor: meta.bg,
               }}
             >
               {isUrgent && <span className="urgent-dot" style={styles.urgentDot} />}
               {meta.label}
             </span>
           </div>
-              
+
           <div style={styles.metaGrid}>
-            <MetaItem label="Client" value={order.client_name} />
-            <MetaItem label="Téléphone" value={order.client_phone} />
+            <MetaItem label="Client" value={order.client_name || 'Non renseigné'} />
+            <MetaItem label="Téléphone" value={order.client_phone || 'Non renseigné'} />
             <MetaItem label="Total" value={formatPrice(order.total_price)} emphasize />
-          
+
             <MetaItem
               label="Récupération"
               value={
                 order.delivery_mode === 'delivery'
-                  ? `${DELIVERY_MODE_LABEL[order.delivery_mode]} - ${order.delivery_address}`
+                  ? `${DELIVERY_MODE_LABEL[order.delivery_mode]} - ${order.delivery_address || 'Adresse non renseignée'}`
                   : DELIVERY_MODE_LABEL[order.delivery_mode] ?? order.delivery_mode
               }
             />
@@ -688,11 +755,23 @@ const OrderCard = React.memo(function OrderCard({
             ))}
           </select>
 
+          {!isTerminal && (
+            <button
+              className="text-action"
+              disabled={isUpdating}
+              onClick={() => onStatusChange(order.id, 'annulee')}
+              style={styles.cancelBtn}
+            >
+              Annuler
+            </button>
+          )}
+
           <button
             className="icon-btn"
             onClick={() => onDeleteRequest(order.id)}
             style={styles.deleteBtn}
-            aria-label="Supprimer la commande"
+            aria-label="Supprimer définitivement la commande"
+            title="Suppression définitive"
           >
             Supprimer
           </button>
@@ -827,24 +906,12 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     color: COLORS.textMuted,
     cursor: 'pointer',
-    padding: 2,
+    padding: 4,
     display: 'flex',
     alignItems: 'center',
     borderRadius: 6,
   },
   headerActions: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  soundBtn: {
-    border: `1px solid ${COLORS.midGray}`,
-    backgroundColor: '#FFFFFF',
-    color: COLORS.textDark,
-    cursor: 'pointer',
-    borderRadius: 10,
-    width: 36,
-    height: 36,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   totalBadge: {
     display: 'flex',
     alignItems: 'baseline',
@@ -903,6 +970,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.textDark,
     width: '100%',
     backgroundColor: 'transparent',
+  },
+  searchClearBtn: {
+    border: 'none',
+    background: 'none',
+    color: COLORS.textMuted,
+    cursor: 'pointer',
+    padding: 2,
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: 6,
+    flexShrink: 0,
   },
   filterBar: {
     display: 'flex',
@@ -985,7 +1063,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: COLORS.textDark,
     fontWeight: 500,
     overflow: 'hidden',
-    // textOverflow: 'ellipsis',
     whiteSpace: 'normal',
   },
   metaValueStrong: { color: COLORS.appleGreenDark, fontWeight: 700 },
@@ -1076,6 +1153,16 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: COLORS.lightGray,
     cursor: 'pointer',
     outline: 'none',
+  },
+  cancelBtn: {
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 600,
+    padding: '9px 10px',
+    borderRadius: 10,
+    cursor: 'pointer',
   },
   deleteBtn: {
     border: 'none',
