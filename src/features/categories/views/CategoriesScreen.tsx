@@ -141,86 +141,93 @@ export default function CategoryPage() {
   }
 
   return (
-    <div className="cat-page">
-      <div className="cat-container">
+    <div className= "cat-page" >
+    <div className="cat-container" >
 
-        <h1 className="cat-title">
-          Gestion des catégories
-        </h1>
+      <h1 className="cat-title" >
+        Gestion des catégories
+          </h1>
 
-        <p className="cat-subtitle">
-          Faites glisser les catégories pour changer leur ordre.
+          < p className = "cat-subtitle" >
+            Faites glisser les catégories pour changer leur ordre.
         </p>
 
-        {errorMessage && (
-          <div className="cat-error">
-            {errorMessage}
-          </div>
-        )}
+  {
+    errorMessage && (
+      <div className="cat-error" >
+        { errorMessage }
+        </div>
+        )
+  }
 
-        <div className="cat-add-bar">
+  <div className="cat-add-bar" >
 
-          <input
+    <input
             className="cat-input"
-            value={name}
-            placeholder="Nom de la catégorie"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) =>
-              e.key === "Enter" && addCategory()
+  value = { name }
+  placeholder = "Nom de la catégorie"
+  onChange = {(e) => setName(e.target.value)
+}
+onKeyDown = {(e) =>
+e.key === "Enter" && addCategory()
             }
           />
 
-          <button
-            className="cat-btn-primary"
-            onClick={addCategory}
-          >
-            Ajouter
-          </button>
+  < button
+className = "cat-btn-primary"
+onClick = { addCategory }
+  >
+  Ajouter
+  </button>
 
-        </div>
+  </div>
 
-        {loading ? (
-          <p>Chargement...</p>
+{
+  loading ? (
+    <p>Chargement...</p>
         ) : (
 
-          <DndContext
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
+    <DndContext
+            collisionDetection= { closestCenter }
+  onDragEnd = { handleDragEnd }
+    >
 
-            <SortableContext
-              items={categories.map((c) => c.id)}
-              strategy={verticalListSortingStrategy}
-            >
+    <SortableContext
+              items={ categories.map((c) => c.id) }
+  strategy = { verticalListSortingStrategy }
+    >
 
-              <div className="cat-list">
+    <div className="cat-list" >
 
-                {categories.map((category) => (
+    {
+      categories.map((category) => (
 
-                  <SortableCategory
-                    key={category.id}
-                    category={category}
-                    editingId={editingId}
-                    editValue={editValue}
-                    setEditValue={setEditValue}
-                    startEditing={startEditing}
-                    cancelEditing={cancelEditing}
-                    saveEditing={saveEditing}
-                    deleteCategory={deleteCategory}
-                    toggleActive={toggleActive}
-                  />
+        <SortableCategory
+                    key= { category.id }
+                    category = { category }
+                    editingId = { editingId }
+                    editValue = { editValue }
+                    setEditValue = { setEditValue }
+                    startEditing = { startEditing }
+        cancelEditing = { cancelEditing }
+                    saveEditing = { saveEditing }
+                    deleteCategory = { deleteCategory }
+                    toggleActive = { toggleActive }
+        />
 
-                ))}
-
-              </div>
-
-            </SortableContext>
-
-          </DndContext>
-
-        )}
+                ))
+    }
 
       </div>
-    </div>
+
+      </SortableContext>
+
+      </DndContext>
+
+        )
+}
+
+</div>
+  </div>
   );
 }

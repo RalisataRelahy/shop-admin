@@ -4,11 +4,14 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../../supabase/config';
-import { IoChevronDown, IoChevronUp, IoRefresh, IoSearch, IoClose } from 'react-icons/io5';
+import { IoChevronDown, IoChevronUp, IoRefresh, IoSearch } from 'react-icons/io5';
 import { exportOrders } from '../data/ExportData';
 import { Button } from '@mui/material';
-
+import OrderPrint, {
+  type PrintOrder,
+} from './components/OrderPrint';
 // ============================================================================
 // MODELE DE DONNEES
 // ----------------------------------------------------------------------------
@@ -17,24 +20,12 @@ import { Button } from '@mui/material';
 //         'en_cours_de_livraison','livree','annulee']
 // Ce tableau ne fait QUE lire, mettre à jour le statut, et supprimer.
 // Aucune création de commande ici (les commandes arrivent côté client).
-//
-// CORRECTIFS APPORTÉS (voir résumé dans la réponse) :
-//  1. Ajout des statuts 'acceptée' et 'prete' manquants du cycle de vie.
-//  2. La requête filtre désormais réellement sur la journée en cours.
-//  3. formatPrice tolère les valeurs numériques renvoyées en string.
-//  4. Fallbacks d'affichage pour les champs client potentiellement null.
-//  5. Rafraîchissement manuel non destructif (plus de flash skeleton).
-//  6. Couleurs de la carte "urgente" alignées sur la palette existante.
-//  7. Action rapide "Annuler" distincte de la suppression définitive.
-//  8. Recherche insensible aux accents.
 // ============================================================================
 
 export type OrderStatus =
   | 'non_confirmer'
   | 'reçue'
-  | 'acceptée'
   | 'en_preparation'
-  | 'prete'
   | 'en_cours_de_livraison'
   | 'livree'
   | 'annulee';
@@ -61,14 +52,15 @@ export interface Order {
   user_id: string;
   statut: OrderStatus;
   delivery_mode: 'pickup' | 'delivery' | string;
-  delivery_address: string | null;
+  delivery_address: string;
   notes: string | null;
   payment_method: 'mobile_money' | 'especes' | string;
   total_price: number;
-  client_phone: string | null;
-  client_name: string | null;
+  client_phone: string;
+  client_name: string;
   created_at: string;
   order_items: OrderItemRow[];
+  pickup_time:string;
 }
 
 // --- Noms de tables/colonnes réelles — à ajuster si besoin ---
@@ -102,61 +94,39 @@ function resolveItemDisplay(item: OrderItemRow): { name: string; imageUrl: strin
   return { name: 'Article indisponible', imageUrl: null };
 }
 
-// Ordre logique complet du cycle de vie d'une commande.
+// Ordre logique du cycle de vie d'une commande.
 const STATUS_ORDER: OrderStatus[] = [
   'non_confirmer',
   'reçue',
-  'acceptée',
   'en_preparation',
-  'prete',
   'en_cours_de_livraison',
   'livree',
   'annulee',
 ];
 
 // Prochaine étape "naturelle" pour l'action rapide en un clic.
-// `undefined` = fin de cycle, pas d'action rapide proposée (utiliser le menu déroulant).
+// `null` = fin de cycle, pas d'action rapide proposée (utiliser le menu déroulant).
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   non_confirmer: 'reçue',
-  reçue: 'acceptée',
-  acceptée: 'en_preparation',
-  en_preparation: 'prete',
-  prete: 'en_cours_de_livraison',
+  reçue: 'en_preparation',
+  en_preparation: 'en_cours_de_livraison',
   en_cours_de_livraison: 'livree',
 };
 
 const NEXT_ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
   non_confirmer: 'Confirmer',
-  reçue: 'Accepter',
-  acceptée: 'Démarrer la préparation',
-  en_preparation: 'Marquer prête',
-  prete: 'Envoyer en livraison',
+  reçue: 'Démarrer la préparation',
+  en_preparation: 'Envoyer en livraison',
   en_cours_de_livraison: 'Marquer livrée',
 };
-
-// Statuts pour lesquels annuler / supprimer n'a plus de sens.
-const TERMINAL_STATUSES: OrderStatus[] = ['livree', 'annulee'];
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string }> = {
   non_confirmer: { label: 'Non confirmée', color: '#D8281C', bg: '#FDE4E2' },
   'reçue': { label: 'Reçue', color: '#4A6FA5', bg: '#E9F0F9' },
-  acceptée: { label: 'Acceptée', color: '#3E7CB8', bg: '#E7F1FA' },
   en_preparation: { label: 'En préparation', color: '#B8791F', bg: '#FBF0DF' },
-  prete: { label: 'Prête', color: '#8C7C1F', bg: '#F8F3DC' },
   en_cours_de_livraison: { label: 'En livraison', color: '#5B57A6', bg: '#ECEBF7' },
   livree: { label: 'Livrée', color: '#128171', bg: '#EAF6F4' },
   annulee: { label: 'Annulée', color: '#8A8D85', bg: '#EEEEEC' },
-};
-
-const STATUS_CARD_BG: Record<OrderStatus, string> = {
-  non_confirmer: '#FFFFFF',
-  'reçue': '#FDF2F1',
-  acceptée: '#FFFFFF',
-  en_preparation: '#FBF0DF',
-  prete: '#FFFFFF',
-  en_cours_de_livraison: '#EAF6F4',
-  livree: '#F4F5F2',
-  annulee: '#FFFFFF',
 };
 
 const DELIVERY_MODE_LABEL: Record<string, string> = {
@@ -179,14 +149,10 @@ const COLORS = {
   textMuted: '#8A8D85',
   danger: '#C4453C',
   urgent: '#D8281C',
-  urgentBg: '#FDF2F1',
-  urgentBorder: '#F3B3AC',
 };
 
 function formatPrice(value: number): string {
-  const numericValue = typeof value === 'number' ? value : Number(value);
-  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
-  return `${safeValue.toLocaleString('fr-FR')} Ar`;
+  return `${value.toLocaleString('fr-FR')} Ar`;
 }
 
 function formatDate(iso: string): string {
@@ -202,37 +168,26 @@ function formatDate(iso: string): string {
   }
 }
 
-/** Retire les accents pour une recherche plus tolérante ("recu" -> "reçu"). */
-function normalizeText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
 function matchesSearch(order: Order, query: string): boolean {
-  if (!query.trim()) return true;
+  if (!query) return true;
 
-  const q = normalizeText(query.trim());
+  const q = query.trim().toLowerCase();
   const itemNames = (order.order_items ?? [])
     .map((item) => {
       if (item.combo_id && item.combo) return item.combo.name ?? '';
       if (item.product_id && item.menu) return item.menu.name ?? '';
       return '';
     })
-    .join(' ');
+    .join(' ')
+    .toLowerCase();
 
-  const haystack = normalizeText(
-    [
-      order.id,
-      order.client_name ?? '',
-      order.client_phone ?? '',
-      order.notes ?? '',
-      itemNames,
-    ].join(' ')
+  return (
+    order.id.toLowerCase().includes(q) ||
+    (order.client_name ?? '').toLowerCase().includes(q) ||
+    (order.client_phone ?? '').toLowerCase().includes(q) ||
+    (order.notes ?? '').toLowerCase().includes(q) ||
+    itemNames.includes(q)
   );
-
-  return haystack.includes(q);
 }
 
 // ============================================================================
@@ -241,7 +196,6 @@ function matchesSearch(order: Order, query: string): boolean {
 export default function OrdersDashboard(): React.JSX.Element {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<OrderStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -250,6 +204,70 @@ export default function OrdersDashboard(): React.JSX.Element {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
+  // Printer Order==============================
+  const [printOrder, setPrintOrder] = useState<{
+    order: PrintOrder;
+    type: 'commande' | 'livraison';
+  } | null>(null);
+
+  const preparePrintOrder = useCallback(
+    (
+      order: Order,
+      type: 'commande' | 'livraison'
+    ): void => {
+
+      const printData: PrintOrder = {
+        id: order.id,
+
+        clientName: order.client_name,
+
+        clientPhone: order.client_phone,
+
+        deliveryAddress:
+          order.delivery_address ?? '',
+
+        deliveryMode:
+          DELIVERY_MODE_LABEL[order.delivery_mode]
+          ?? order.delivery_mode,
+
+        // Conserver la valeur technique pour la logique du reçu. Le libellé
+        // affiché est traduit, il ne doit donc pas servir de condition.
+        deliveryModeKey: order.delivery_mode,
+
+        paymentMethod:
+          PAYMENT_LABEL[order.payment_method]
+          ?? order.payment_method,
+
+        totalPrice: order.total_price,
+        pickupTime:order.pickup_time,
+        createdAt: order.created_at,
+
+        notes: order.notes,
+
+        items: (order.order_items ?? []).map((item) => {
+          const display = resolveItemDisplay(item);
+
+          return {
+            id: item.id,
+
+            name: display.name,
+
+            quantity: item.quantity,
+
+            unitPrice: item.unit_price,
+
+            variante: item.variante?.name ?? null,
+          };
+        }),
+      };
+
+      setPrintOrder({
+        order: printData,
+        type,
+      });
+    },
+    []
+  );
   const toggleExpanded = useCallback((orderId: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -259,8 +277,8 @@ export default function OrdersDashboard(): React.JSX.Element {
     });
   }, []);
 
-  // --- READ : chargement des commandes du jour (bornes réellement appliquées) ---
-  const loadOrders = useCallback(async (): Promise<boolean> => {
+  // --- READ : chargement initial (commandes du jour + articles joints) ---
+  const fetchTodayOrders = useCallback(async (): Promise<void> => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -270,32 +288,22 @@ export default function OrdersDashboard(): React.JSX.Element {
     const { data, error } = await supabase
       .from(ORDERS_TABLE)
       .select(ORDER_SELECT_QUERY)
-      .gte('created_at', startOfDay.toISOString())
-      .lte('created_at', endOfDay.toISOString())
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       setOrders(data as unknown as Order[]);
       setLastSyncedAt(new Date());
       setErrorMessage(null);
-      return true;
+    } else if (error) {
+      setErrorMessage('Impossible de charger les commandes.');
     }
-    setErrorMessage('Impossible de charger les commandes.');
-    return false;
+    setLoading(false);
   }, []);
 
-  const fetchTodayOrders = useCallback(async (): Promise<void> => {
-    await loadOrders();
-    setLoading(false);
-  }, [loadOrders]);
-
-  // Rafraîchissement manuel : garde la liste actuelle affichée pendant le
-  // rechargement, au lieu de tout remplacer par des skeletons.
-  const handleManualRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadOrders();
-    setRefreshing(false);
-  }, [loadOrders]);
+  const handleManualRefresh = useCallback(() => {
+    setLoading(true);
+    fetchTodayOrders();
+  }, [fetchTodayOrders]);
 
   // Le flux temps réel de `orders` ne contient pas les lignes jointes de
   // order_items (Supabase Realtime n'envoie que la table concernée). On
@@ -311,12 +319,13 @@ export default function OrdersDashboard(): React.JSX.Element {
     return data as unknown as Order;
   }, []);
 
+  // --- Audio : déblocage, activation, contrôle de l'alarme ---
   // --- Chargement initial + abonnement temps réel (INSERT / UPDATE / DELETE) ---
   useEffect(() => {
     fetchTodayOrders();
 
     const ordersSubscription = supabase
-      .channel(`orders-dashboard-changes`)
+      .channel('table-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: ORDERS_TABLE },
@@ -415,21 +424,31 @@ export default function OrdersDashboard(): React.JSX.Element {
       .filter((o) => matchesSearch(o, searchQuery));
   }, [orders, activeFilter, searchQuery]);
 
+  useEffect(() => {
+    if (!printOrder) return;
+
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setPrintOrder(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [printOrder]);
+
   const todayRevenue = useMemo(
     () =>
       orders
         .filter((o) => o.statut !== 'annulee')
-        .reduce((sum, o) => sum + (Number(o.total_price) || 0), 0),
+        .reduce((sum, o) => sum + (o.total_price ?? 0), 0),
     [orders]
   );
 
   return (
-    <div style={styles.page}>
+    <div style={styles.page} className="orders-page">
       <style>{`
         @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(18,129,113,0.35); }
-          70% { box-shadow: 0 0 0 8px rgba(18,129,113,0); }
-          100% { box-shadow: 0 0 0 0 rgba(18,129,113,0); }
+          0% { box-shadow: 0 0 0 0 rgba(124,187,63,0.45); }
+          70% { box-shadow: 0 0 0 8px rgba(124,187,63,0); }
+          100% { box-shadow: 0 0 0 0 rgba(124,187,63,0); }
         }
         @keyframes pulseUrgent {
           0% { box-shadow: 0 0 0 0 rgba(216,40,28,0.35); }
@@ -440,13 +459,9 @@ export default function OrdersDashboard(): React.JSX.Element {
           from { opacity: 0; transform: translateY(6px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
         @media (prefers-reduced-motion: reduce) {
           .order-card, .items-panel { animation: none !important; }
-          .live-dot, .urgent-dot, .refresh-spin { animation: none !important; }
+          .live-dot, .urgent-dot { animation: none !important; }
         }
         .order-card { animation: fadeIn 0.22s ease-out; transition: box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.2s ease; }
         .order-card:hover { box-shadow: 0 4px 14px rgba(46,46,43,0.06); border-color: #D8DAD5; }
@@ -454,11 +469,9 @@ export default function OrdersDashboard(): React.JSX.Element {
         .filter-pill:active { transform: scale(0.97); }
         .icon-btn { transition: background-color 0.15s ease, transform 0.1s ease; }
         .icon-btn:active { transform: scale(0.96); }
-        .icon-btn:hover { background-color: ${COLORS.lightGray}; }
         .primary-action { transition: background-color 0.15s ease, transform 0.1s ease; }
         .primary-action:hover { filter: brightness(1.05); }
         .primary-action:active { transform: scale(0.97); }
-        .text-action:hover { text-decoration: underline; }
         select.status-select { transition: border-color 0.15s ease; }
         select.status-select:hover { border-color: ${COLORS.appleGreen}; }
         .search-input:focus, select.status-select:focus, button:focus-visible {
@@ -467,15 +480,103 @@ export default function OrdersDashboard(): React.JSX.Element {
         }
         .live-dot { animation: pulse 2s infinite; }
         .urgent-dot { animation: pulseUrgent 1.4s infinite; }
-        .refresh-spin { animation: spin 0.7s linear infinite; }
+        
+        /* Ultra-responsive breakpoints */
+        @media (max-width: 1200px) {
+          .orders-page { padding: 20px 16px 40px; }
+          .orders-header { gap: 8px; }
+          .orders-title { font-size: 22px; }
+          .orders-meta-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); column-gap: 12px; row-gap: 6px; }
+        }
+        
+        @media (max-width: 768px) {
+          .orders-page { padding: 16px 12px 36px; max-width: 100%; }
+          .orders-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+          .orders-header-actions { width: 100%; flex-direction: column; gap: 8px; }
+          .orders-header-badge { width: 100%; }
+          .orders-title { font-size: 20px; }
+          .orders-toolbar { gap: 10px; }
+          .orders-search-wrap { max-width: 100%; width: 100%; }
+          .orders-filter-bar { gap: 6px; }
+          .filter-pill { padding: 6px 10px; font-size: 12px; }
+          .orders-card { padding: 12px 14px; }
+          .orders-card-body { flex-direction: column; gap: 12px; }
+          .orders-card-main { flex: 1 1 100%; }
+          .orders-card-actions { justify-content: flex-start; flex-wrap: wrap; width: 100%; gap: 6px; }
+          .orders-meta-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); column-gap: 10px; row-gap: 6px; }
+          .orders-meta-label { font-size: 10px; }
+          .orders-meta-value { font-size: 12px; }
+          .orders-primary-btn { padding: 8px 12px; font-size: 12px; flex: 1 1 auto; }
+          .orders-select { padding: 8px 10px; font-size: 12px; }
+          .orders-status-badge { font-size: 11px; padding: 2px 8px; }
+          .orders-notes { font-size: 12px; margin-top: 8px; }
+          .orders-expand-toggle { font-size: 12px; margin-top: 8px; }
+          .orders-item-row { gap: 10px; }
+          .orders-item-thumb { width: 36px; height: 36px; }
+          .orders-item-name { font-size: 12px; }
+          .orders-item-qty { font-size: 11px; }
+          .orders-item-total { font-size: 12px; }
+          .orders-print-btn { padding: 8px 10px; font-size: 12px; }
+          .orders-delete-btn { padding: 8px 8px; font-size: 12px; }
+          .orders-empty-state { padding: 40px 15px; }
+          .orders-empty-title { font-size: 14px; }
+          .orders-empty-text { font-size: 12px; }
+        }
+        
+        @media (max-width: 480px) {
+          .orders-page { padding: 12px 8px 28px; }
+          .orders-header { gap: 10px; }
+          .orders-title { font-size: 18px; margin-bottom: 4px; }
+          .orders-live-row { font-size: 11px; gap: 4px; }
+          .orders-toolbar { gap: 8px; margin-bottom: 6px; }
+          .orders-search-wrap { padding: 7px 10px; }
+          .orders-search-input { font-size: 12px; }
+          .orders-filter-bar { gap: 4px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+          .filter-pill { padding: 5px 9px; font-size: 11px; flex-shrink: 0; }
+          .orders-list { gap: 10px; }
+          .orders-card { padding: 10px 12px; border-radius: 12px; }
+          .orders-card-body { flex-direction: column; gap: 10px; }
+          .orders-card-main { width: 100%; }
+          .orders-card-top-row { gap: 8px; margin-bottom: 8px; }
+          .orders-order-id { font-size: 12px; }
+          .orders-card-actions { flex-direction: column; width: 100%; }
+          .orders-primary-btn { width: 100%; padding: 10px 12px; font-size: 13px; order: -1; }
+          .orders-select { width: 100%; padding: 9px 10px; font-size: 12px; }
+          .orders-print-btn { width: 100%; padding: 10px 12px; font-size: 12px; }
+          .orders-delete-btn { width: 100%; padding: 10px 12px; font-size: 12px; }
+          .orders-meta-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); column-gap: 8px; row-gap: 5px; }
+          .orders-meta-label { font-size: 9px; }
+          .orders-meta-value { font-size: 11px; }
+          .orders-items-panel { margin-top: 6px; padding-top: 10px; gap: 8px; }
+          .orders-item-thumb { width: 32px; height: 32px; }
+          .orders-item-info { flex: 1; }
+          .orders-item-name { font-size: 11px; }
+          .orders-item-qty { font-size: 10px; }
+          .orders-item-total { font-size: 11px; }
+          .orders-status-badge { font-size: 10px; padding: 2px 6px; gap: 3px; }
+          .orders-expand-toggle { font-size: 11px; gap: 3px; }
+          .orders-empty-state { padding: 30px 12px; border-radius: 12px; }
+          .orders-empty-title { font-size: 13px; margin-bottom: 5px; }
+          .orders-empty-text { font-size: 11px; }
+          .orders-dialog { padding: 18px; max-width: 90vw; }
+          .orders-dialog-text { font-size: 13px; margin-bottom: 16px; }
+        }
+        
+        @media (max-width: 360px) {
+          .orders-page { padding: 10px 6px 24px; }
+          .orders-title { font-size: 16px; }
+          .orders-card { padding: 8px 10px; }
+          .filter-pill { padding: 4px 8px; font-size: 10px; }
+          .orders-primary-btn { padding: 8px 10px; font-size: 12px; }
+        }
       `}</style>
 
-      <header style={styles.header}>
+      <header style={styles.header} className="orders-header">
         <div>
-          <h1 style={styles.title}>Commandes</h1>
-          <div style={styles.liveRow}>
+          <h1 style={styles.title} className="orders-title">Commandes</h1>
+          <div style={styles.liveRow} className="orders-live-row">
             <span className="live-dot" style={styles.liveDot} />
-            <span style={styles.liveText}>
+            <span style={styles.liveText} className="orders-live-text">
               {lastSyncedAt
                 ? `Synchronisé à ${formatDate(lastSyncedAt.toISOString())}`
                 : 'Synchronisation en direct'}
@@ -483,27 +584,26 @@ export default function OrdersDashboard(): React.JSX.Element {
             <button
               className="icon-btn"
               onClick={handleManualRefresh}
-              disabled={refreshing}
               style={styles.refreshBtn}
               aria-label="Actualiser les commandes"
               title="Actualiser"
             >
-              <IoRefresh size={14} className={refreshing ? 'refresh-spin' : undefined} />
+              <IoRefresh size={14} />
             </button>
           </div>
         </div>
 
-        <div style={styles.headerActions}>
+        <div style={styles.headerActions} className="orders-header-actions">
           <Button onClick={exportOrders} variant="outlined" size="small">
             Exporter les commandes
           </Button>
 
-          <div style={styles.totalBadge}>
+          <div style={styles.totalBadge} className="orders-header-badge">
             <span style={styles.totalNumber}>{orders.length}</span>
-            <span style={styles.totalLabel}>commande{orders.length > 1 ? 's' : ''} aujourd'hui</span>
+            <span style={styles.totalLabel}>commande{orders.length > 1 ? 's' : ''}</span>
           </div>
 
-          <div style={styles.totalBadge}>
+          <div style={styles.totalBadge} className="orders-header-badge">
             <span style={styles.totalNumber}>{formatPrice(todayRevenue)}</span>
             <span style={styles.totalLabel}>encaissé aujourd'hui</span>
           </div>
@@ -519,31 +619,20 @@ export default function OrdersDashboard(): React.JSX.Element {
         </div>
       )}
 
-      <div style={styles.toolbar}>
-        <div style={styles.searchWrap}>
+      <div style={styles.toolbar} className="orders-toolbar">
+        <div style={styles.searchWrap} className="orders-search-wrap">
           <IoSearch size={15} color={COLORS.textMuted} />
           <input
-            className="search-input"
+            className="search-input orders-search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher par nom, téléphone ou n° de commande"
             style={styles.searchInput}
             aria-label="Rechercher une commande"
           />
-          {searchQuery && (
-            <button
-              className="icon-btn"
-              onClick={() => setSearchQuery('')}
-              style={styles.searchClearBtn}
-              aria-label="Effacer la recherche"
-              title="Effacer"
-            >
-              <IoClose size={14} />
-            </button>
-          )}
         </div>
 
-        <div style={styles.filterBar}>
+        <div style={styles.filterBar} className="orders-filter-bar">
           <FilterPill
             label="Toutes"
             count={counts.all}
@@ -564,24 +653,24 @@ export default function OrdersDashboard(): React.JSX.Element {
       </div>
 
       {loading ? (
-        <div style={styles.list}>
+        <div style={styles.list} className="orders-list">
           {[0, 1, 2].map((i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={styles.emptyTitle}>Aucune commande</p>
-          <p style={styles.emptyText}>
+        <div style={styles.emptyState} className="orders-empty-state">
+          <p style={styles.emptyTitle} className="orders-empty-title">Aucune commande</p>
+          <p style={styles.emptyText} className="orders-empty-text">
             {searchQuery
               ? 'Aucune commande ne correspond à votre recherche.'
               : activeFilter === 'all'
-              ? 'Les nouvelles commandes apparaîtront ici automatiquement.'
-              : 'Aucune commande ne correspond à ce statut pour le moment.'}
+                ? 'Les nouvelles commandes apparaîtront ici automatiquement.'
+                : 'Aucune commande ne correspond à ce statut pour le moment.'}
           </p>
         </div>
       ) : (
-        <div style={styles.list} aria-busy={refreshing}>
+        <div style={styles.list} className="orders-list">
           {filteredOrders.map((order) => (
             <OrderCard
               key={order.id}
@@ -591,9 +680,39 @@ export default function OrdersDashboard(): React.JSX.Element {
               onToggleExpanded={toggleExpanded}
               onStatusChange={handleUpdateStatus}
               onDeleteRequest={setPendingDeleteId}
+              onPrint={(order, type) =>
+                preparePrintOrder(order, type)
+              }
             />
           ))}
         </div>
+      )}
+
+      {printOrder && createPortal(
+        <div
+          className="orders-print-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(32, 32, 32, 0.35)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            padding: '28px 16px',
+            overflowY: 'auto',
+            zIndex: 100,
+          }}
+          onClick={() => setPrintOrder(null)}
+        >
+          <div onClick={(event) => event.stopPropagation()}>
+            <OrderPrint
+              order={printOrder.order}
+              type={printOrder.type}
+              onClose={() => setPrintOrder(null)}
+            />
+          </div>
+        </div>,
+        document.body,
       )}
 
       {pendingDeleteId && (
@@ -656,58 +775,72 @@ const OrderCard = React.memo(function OrderCard({
   onToggleExpanded,
   onStatusChange,
   onDeleteRequest,
+  onPrint,
 }: {
   order: Order;
   isUpdating: boolean;
   expanded: boolean;
   onToggleExpanded: (orderId: string) => void;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
+  onPrint: (order: Order, type: 'commande' | 'livraison') => void;
   onDeleteRequest: (orderId: string) => void;
 }) {
   const meta = STATUS_META[order.statut] ?? STATUS_META.non_confirmer;
   const items = order.order_items ?? [];
   const itemCount = items.reduce((sum, it) => sum + it.quantity, 0);
   const isUrgent = order.statut === 'non_confirmer';
-  const isTerminal = TERMINAL_STATUSES.includes(order.statut);
   const nextStatus = NEXT_STATUS[order.statut];
   const nextLabel = NEXT_ACTION_LABEL[order.statut];
+  const cardBackgroundColor = isUrgent
+    ? '#f3b0a7'
+    : order.statut === 'reçue'
+      ? 'rgba(243, 243, 0, 0.37)'
+      : order.statut === 'en_preparation'
+        ? 'rgba(94, 255, 49, 0.34)'
+        : order.statut === 'en_cours_de_livraison'
+          ? 'rgba(67, 161, 173, 0.17)'
+          : order.statut === 'livree'
+            ? 'rgb(255, 255, 255)'
+            : '#626262';
 
   return (
     <div
-      className="order-card"
+      className="order-card orders-card"
       style={{
         ...styles.card,
-        borderLeft: `5px solid ${isUrgent ? COLORS.urgent : meta.color}`,
-        borderColor: isUrgent ? COLORS.urgentBorder : COLORS.midGray,
-        backgroundColor: isUrgent ? COLORS.urgentBg : STATUS_CARD_BG[order.statut] ?? '#FFFFFF',
+        borderLeft: `6px solid ${isUrgent ? COLORS.urgent : meta.color}`,
+        borderColor: isUrgent ? '#f96653' : COLORS.midGray,
+        backgroundColor: cardBackgroundColor,
+        boxShadow: isUrgent ? '0 0 0 1px rgba(223, 15, 0, 0.7), 0 10px 24px rgba(255, 17, 0, 0.6)' : undefined,
       }}
     >
-      <div style={styles.cardBody}>
-        <div style={styles.cardMain}>
-          <div style={styles.cardTopRow}>
-            <span style={styles.orderId}>#{order.id.slice(0, 8)}</span>
+      <div style={styles.cardBody} className="orders-card-body">
+        <div style={styles.cardMain} className="orders-card-main">
+          <div style={styles.cardTopRow} className="orders-card-top-row">
+            <span style={styles.orderId} className="orders-order-id">#{order.id.slice(0, 8)}</span>
             <span
               style={{
                 ...styles.statusBadge,
-                color: meta.color,
-                backgroundColor: meta.bg,
+                color: isUrgent ? COLORS.urgent : meta.color,
+                backgroundColor: isUrgent ? '#FDE4E2' : meta.bg,
               }}
+              className="orders-status-badge"
             >
               {isUrgent && <span className="urgent-dot" style={styles.urgentDot} />}
               {meta.label}
             </span>
           </div>
 
-          <div style={styles.metaGrid}>
-            <MetaItem label="Client" value={order.client_name || 'Non renseigné'} />
-            <MetaItem label="Téléphone" value={order.client_phone || 'Non renseigné'} />
+          <div style={styles.metaGrid} className="orders-meta-grid">
+            <MetaItem label="Client" value={order.client_name} />
+            <MetaItem label="Téléphone" value={order.client_phone} />
             <MetaItem label="Total" value={formatPrice(order.total_price)} emphasize />
 
             <MetaItem
               label="Récupération"
               value={
                 order.delivery_mode === 'delivery'
-                  ? `${DELIVERY_MODE_LABEL[order.delivery_mode]} - ${order.delivery_address || 'Adresse non renseignée'}`
+                  ? `${DELIVERY_MODE_LABEL[order.delivery_mode]} - ${order.delivery_address}`
                   : DELIVERY_MODE_LABEL[order.delivery_mode] ?? order.delivery_mode
               }
             />
@@ -718,10 +851,10 @@ const OrderCard = React.memo(function OrderCard({
             <MetaItem label="Reçue le" value={formatDate(order.created_at)} />
           </div>
 
-          {order.notes && <p style={styles.notes}>{order.notes}</p>}
+          {order.notes && <p style={styles.notes} className="orders-notes">{order.notes}</p>}
 
           {items.length > 0 && (
-            <button style={styles.expandToggle} onClick={() => onToggleExpanded(order.id)}>
+            <button style={styles.expandToggle} className="orders-expand-toggle" onClick={() => onToggleExpanded(order.id)}>
               {expanded ? (
                 <>
                   Masquer les articles <IoChevronUp size={14} />
@@ -735,10 +868,10 @@ const OrderCard = React.memo(function OrderCard({
           )}
         </div>
 
-        <div style={styles.cardActions}>
+        <div style={styles.cardActions} className="orders-card-actions">
           {nextStatus && nextLabel && (
             <button
-              className="primary-action"
+              className="primary-action orders-primary-btn"
               disabled={isUpdating}
               onClick={() => onStatusChange(order.id, nextStatus)}
               style={{
@@ -752,7 +885,7 @@ const OrderCard = React.memo(function OrderCard({
           )}
 
           <select
-            className="status-select"
+            className="status-select orders-select"
             value={order.statut}
             disabled={isUpdating}
             onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
@@ -765,24 +898,32 @@ const OrderCard = React.memo(function OrderCard({
               </option>
             ))}
           </select>
+          {order.statut !== 'non_confirmer' && (
+            <>
+              <button
+                type="button"
+                onClick={() => onPrint(order, 'commande')}
+                className="orders-print-btn"
+                style={styles.printOrderBtn}
+              >
+                Bon de commande
+              </button>
 
-          {!isTerminal && (
-            <button
-              className="text-action"
-              disabled={isUpdating}
-              onClick={() => onStatusChange(order.id, 'annulee')}
-              style={styles.cancelBtn}
-            >
-              Annuler
-            </button>
+              <button
+                type="button"
+                onClick={() => onPrint(order, 'livraison')}
+                className="orders-print-btn"
+                style={styles.printDeliveryBtn}
+              >
+                Ticket de cuisine
+              </button>
+            </>
           )}
-
           <button
-            className="icon-btn"
+            className="icon-btn orders-delete-btn"
             onClick={() => onDeleteRequest(order.id)}
             style={styles.deleteBtn}
-            aria-label="Supprimer définitivement la commande"
-            title="Suppression définitive"
+            aria-label="Supprimer la commande"
           >
             Supprimer
           </button>
@@ -790,27 +931,27 @@ const OrderCard = React.memo(function OrderCard({
       </div>
 
       {expanded && items.length > 0 && (
-        <div className="items-panel" style={styles.itemsPanel}>
+        <div className="items-panel orders-items-panel" style={styles.itemsPanel}>
           {items.map((item) => {
             const { name, imageUrl } = resolveItemDisplay(item);
             const lineTotal = item.quantity * item.unit_price;
             return (
-              <div key={item.id} style={styles.itemRow}>
+              <div key={item.id} style={styles.itemRow} className="orders-item-row">
                 {imageUrl ? (
-                  <img src={imageUrl} alt={name} style={styles.itemThumb} loading="lazy" />
+                  <img src={imageUrl} alt={name} style={styles.itemThumb} className="orders-item-thumb" loading="lazy" />
                 ) : (
-                  <div style={styles.itemThumbFallback} />
+                  <div style={styles.itemThumbFallback} className="orders-item-thumb" />
                 )}
-                <div style={styles.itemInfo}>
-                  <span style={styles.itemName}>{name}</span>
+                <div style={styles.itemInfo} className="orders-item-info">
+                  <span style={styles.itemName} className="orders-item-name">{name}</span>
                   {item.variante?.name && (
-                    <span style={{ ...styles.itemQty, marginTop: 2 }}>Taille : {item.variante.name}</span>
+                    <span style={{ ...styles.itemQty, marginTop: 2 }} className="orders-item-qty">Taille : {item.variante.name}</span>
                   )}
-                  <span style={styles.itemQty}>
+                  <span style={styles.itemQty} className="orders-item-qty">
                     {item.quantity} × {formatPrice(item.unit_price)}
                   </span>
                 </div>
-                <span style={styles.itemTotal}>{formatPrice(lineTotal)}</span>
+                <span style={styles.itemTotal} className="orders-item-total">{formatPrice(lineTotal)}</span>
               </div>
             );
           })}
@@ -830,9 +971,9 @@ function MetaItem({
   emphasize?: boolean;
 }) {
   return (
-    <div style={styles.metaItem}>
-      <span style={styles.metaLabel}>{label}</span>
-      <span style={{ ...styles.metaValue, ...(emphasize ? styles.metaValueStrong : {}) }}>
+    <div style={styles.metaItem} className="orders-meta-item">
+      <span style={styles.metaLabel} className="orders-meta-label">{label}</span>
+      <span style={{ ...styles.metaValue, ...(emphasize ? styles.metaValueStrong : {}) }} className="orders-meta-value">
         {value}
       </span>
     </div>
@@ -859,14 +1000,14 @@ function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div style={styles.overlay} onClick={onCancel}>
-      <div style={styles.dialog} onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
-        <p style={styles.dialogText}>{message}</p>
-        <div style={styles.dialogActions}>
-          <button style={styles.dialogCancel} onClick={onCancel}>
+    <div style={styles.overlay} className="orders-overlay" onClick={onCancel}>
+      <div style={styles.dialog} className="orders-dialog" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true">
+        <p style={styles.dialogText} className="orders-dialog-text">{message}</p>
+        <div style={styles.dialogActions} className="orders-dialog-actions">
+          <button style={styles.dialogCancel} className="orders-dialog-cancel" onClick={onCancel}>
             Annuler
           </button>
-          <button style={styles.dialogConfirm} onClick={onConfirm} autoFocus>
+          <button style={styles.dialogConfirm} className="orders-dialog-confirm" onClick={onConfirm} autoFocus>
             Supprimer
           </button>
         </div>
@@ -880,30 +1021,33 @@ function ConfirmDialog({
 // ============================================================================
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    padding: '28px 24px 60px',
+    padding: 'clamp(12px, 3vw, 28px) clamp(8px, 4vw, 24px) clamp(28px, 5vw, 60px)',
     backgroundColor: COLORS.offWhite,
     minHeight: '100vh',
     fontFamily:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    maxWidth: 1100,
+    maxWidth: '100%',
     margin: '0 auto',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 'clamp(12px, 3vw, 20px)',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 'clamp(8px, 2vw, 12px)',
+    width: '100%',
   },
   title: {
     color: COLORS.textDark,
-    fontSize: 26,
+    fontSize: 'clamp(18px, 5vw, 26px)',
     fontWeight: 700,
     letterSpacing: '-0.4px',
     margin: 0,
   },
-  liveRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 },
+  liveRow: { display: 'flex', alignItems: 'center', gap: 'clamp(4px, 1vw, 8px)', marginTop: 'clamp(3px, 1vw, 6px)' },
   liveDot: {
     width: 8,
     height: 8,
@@ -911,78 +1055,8 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: COLORS.appleGreen,
     flexShrink: 0,
   },
-  liveText: { fontSize: 13, color: COLORS.textMuted },
+  liveText: { fontSize: 'clamp(11px, 2vw, 13px)', color: COLORS.textMuted },
   refreshBtn: {
-    border: 'none',
-    background: 'none',
-    color: COLORS.textMuted,
-    cursor: 'pointer',
-    padding: 4,
-    display: 'flex',
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  headerActions: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  totalBadge: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    border: `1px solid ${COLORS.midGray}`,
-    borderRadius: 12,
-    padding: '10px 16px',
-  },
-  totalNumber: { fontSize: 18, fontWeight: 700, color: COLORS.textDark, whiteSpace: 'nowrap' },
-  totalLabel: { fontSize: 12.5, color: COLORS.textMuted, whiteSpace: 'nowrap' },
-  errorBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FBEAE8',
-    color: COLORS.danger,
-    padding: '10px 16px',
-    borderRadius: 10,
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  errorDismiss: {
-    background: 'none',
-    border: 'none',
-    color: COLORS.danger,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontSize: 13,
-  },
-  toolbar: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 5,
-    backgroundColor: COLORS.offWhite,
-    paddingBottom: 14,
-    marginBottom: 8,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  searchWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    border: `1px solid ${COLORS.midGray}`,
-    borderRadius: 10,
-    padding: '9px 14px',
-    maxWidth: 420,
-  },
-  searchInput: {
-    border: 'none',
-    outline: 'none',
-    fontSize: 13.5,
-    color: COLORS.textDark,
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  searchClearBtn: {
     border: 'none',
     background: 'none',
     color: COLORS.textMuted,
@@ -991,62 +1065,145 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     borderRadius: 6,
+  },
+  headerActions: { display: 'flex', alignItems: 'center', gap: 'clamp(8px, 2vw, 10px)', flexWrap: 'wrap', width: 'auto' },
+  soundBtn: {
+    border: `1px solid ${COLORS.midGray}`,
+    backgroundColor: '#FFFFFF',
+    color: COLORS.textDark,
+    cursor: 'pointer',
+    borderRadius: 10,
+    width: 36,
+    height: 36,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  totalBadge: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 'clamp(4px, 1vw, 6px)',
+    backgroundColor: '#FFFFFF',
+    border: `1px solid ${COLORS.midGray}`,
+    borderRadius: 12,
+    padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px)',
+    minWidth: 'auto',
     flexShrink: 0,
+  },
+  totalNumber: { fontSize: 'clamp(14px, 3vw, 18px)', fontWeight: 700, color: COLORS.textDark, whiteSpace: 'nowrap' },
+  totalLabel: { fontSize: 'clamp(10px, 2vw, 12.5px)', color: COLORS.textMuted, whiteSpace: 'nowrap' },
+  errorBanner: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FBEAE8',
+    color: COLORS.danger,
+    padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px)',
+    borderRadius: 10,
+    fontSize: 'clamp(12px, 2vw, 14px)',
+    marginBottom: 16,
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  errorDismiss: {
+    background: 'none',
+    border: 'none',
+    color: COLORS.danger,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: 'clamp(11px, 2vw, 13px)',
+  },
+  toolbar: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 5,
+    backgroundColor: COLORS.offWhite,
+    paddingBottom: 'clamp(10px, 2vw, 14px)',
+    marginBottom: 'clamp(6px, 1vw, 8px)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'clamp(8px, 2vw, 12px)',
+    width: '100%',
+  },
+  searchWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'clamp(6px, 1vw, 8px)',
+    backgroundColor: '#FFFFFF',
+    border: `1px solid ${COLORS.midGray}`,
+    borderRadius: 10,
+    padding: 'clamp(7px, 1vw, 9px) clamp(10px, 2vw, 14px)',
+    width: '100%',
+    maxWidth: 'clamp(280px, 90vw, 420px)',
+    boxSizing: 'border-box',
+  },
+  searchInput: {
+    border: 'none',
+    outline: 'none',
+    fontSize: 'clamp(12px, 2vw, 13.5px)',
+    color: COLORS.textDark,
+    width: '100%',
+    backgroundColor: 'transparent',
   },
   filterBar: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 'clamp(6px, 1.5vw, 8px)',
+    width: '100%',
   },
   pill: {
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
+    gap: 'clamp(4px, 1vw, 6px)',
     border: 'none',
     borderRadius: 30,
-    padding: '7px 12px',
-    fontSize: 13,
+    padding: 'clamp(5px, 1vw, 7px) clamp(10px, 2vw, 12px)',
+    fontSize: 'clamp(11px, 2vw, 13px)',
     fontWeight: 600,
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   pillCount: {
     borderRadius: 20,
-    fontSize: 11,
+    fontSize: 'clamp(10px, 1.5vw, 11px)',
     fontWeight: 700,
-    padding: '1px 7px',
+    padding: '1px clamp(5px, 1vw, 7px)',
   },
-  list: { display: 'flex', flexDirection: 'column', gap: 12 },
+  list: { display: 'flex', flexDirection: 'column', gap: 'clamp(10px, 2vw, 12px)', width: '100%' },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 'clamp(12px, 2vw, 14px)',
     border: `1px solid ${COLORS.midGray}`,
-    padding: '16px 18px',
+    padding: 'clamp(10px, 2vw, 16px) clamp(12px, 2.5vw, 18px)',
     display: 'flex',
     flexDirection: 'column',
     gap: 4,
+    width: '100%',
+    boxSizing: 'border-box',
   },
   cardBody: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 16,
+    gap: 'clamp(12px, 2vw, 16px)',
     flexWrap: 'wrap',
+    width: '100%',
   },
-  cardMain: { flex: '1 1 420px', minWidth: 0 },
-  cardTopRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 },
+  cardMain: { flex: '1 1 clamp(280px, 90vw, 420px)', minWidth: 0, width: '100%' },
+  cardTopRow: { display: 'flex', alignItems: 'center', gap: 'clamp(8px, 2vw, 10px)', marginBottom: 'clamp(8px, 2vw, 10px)', flexWrap: 'wrap' },
   orderId: {
     fontFamily: "'SFMono-Regular', Consolas, Menlo, monospace",
-    fontSize: 13,
+    fontSize: 'clamp(11px, 2vw, 13px)',
     color: COLORS.textMuted,
     letterSpacing: '0.2px',
   },
   statusBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 6,
-    fontSize: 12,
+    gap: 'clamp(4px, 1vw, 6px)',
+    fontSize: 'clamp(10px, 1.5vw, 12px)',
     fontWeight: 700,
-    padding: '3px 10px',
+    padding: 'clamp(2px, 0.5vw, 3px) clamp(8px, 1.5vw, 10px)',
     borderRadius: 20,
   },
   urgentDot: {
@@ -1058,19 +1215,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   metaGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-    columnGap: 18,
-    rowGap: 8,
+    gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(80px, 20vw, 120px), 1fr))',
+    columnGap: 'clamp(10px, 2vw, 18px)',
+    rowGap: 'clamp(6px, 1vw, 8px)',
+    width: '100%',
   },
   metaItem: { display: 'flex', flexDirection: 'column', minWidth: 0 },
   metaLabel: {
-    fontSize: 11,
+    fontSize: 'clamp(9px, 1.5vw, 11px)',
     color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.4px',
   },
   metaValue: {
-    fontSize: 14,
+    fontSize: 'clamp(12px, 2vw, 14px)',
     color: COLORS.textDark,
     fontWeight: 500,
     overflow: 'hidden',
@@ -1078,35 +1236,37 @@ const styles: Record<string, React.CSSProperties> = {
   },
   metaValueStrong: { color: COLORS.appleGreenDark, fontWeight: 700 },
   notes: {
-    marginTop: 10,
+    marginTop: 'clamp(8px, 2vw, 10px)',
     marginBottom: 0,
-    fontSize: 13,
+    fontSize: 'clamp(11px, 2vw, 13px)',
     color: COLORS.textMuted,
     fontStyle: 'italic',
   },
   cardActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
+    gap: 'clamp(6px, 1.5vw, 8px)',
     flexShrink: 0,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
+    width: '100%',
   },
   primaryActionBtn: {
     border: 'none',
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 'clamp(11px, 2vw, 13px)',
     fontWeight: 700,
-    padding: '9px 14px',
+    padding: 'clamp(8px, 1.5vw, 9px) clamp(12px, 2vw, 14px)',
     borderRadius: 10,
     whiteSpace: 'nowrap',
+    cursor: 'pointer',
   },
   expandToggle: {
-    marginTop: 10,
+    marginTop: 'clamp(8px, 2vw, 10px)',
     border: 'none',
     background: 'none',
     color: COLORS.appleGreenDark,
-    fontSize: 13,
+    fontSize: 'clamp(11px, 2vw, 13px)',
     fontWeight: 700,
     padding: 0,
     cursor: 'pointer',
@@ -1115,90 +1275,84 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 4,
   },
   itemsPanel: {
-    marginTop: 8,
-    paddingTop: 12,
+    marginTop: 'clamp(6px, 1.5vw, 8px)',
+    paddingTop: 'clamp(10px, 2vw, 12px)',
     borderTop: `1px solid ${COLORS.lightGray}`,
     display: 'flex',
     flexDirection: 'column',
-    gap: 10,
+    gap: 'clamp(8px, 1.5vw, 10px)',
     animation: 'fadeIn 0.2s ease-out',
+    width: '100%',
   },
   itemRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 'clamp(10px, 2vw, 12px)',
+    width: '100%',
   },
   itemThumb: {
-    width: 40,
-    height: 40,
+    width: 'clamp(32px, 8vw, 40px)',
+    height: 'clamp(32px, 8vw, 40px)',
     borderRadius: 8,
     objectFit: 'cover',
     backgroundColor: COLORS.lightGray,
     flexShrink: 0,
   },
   itemThumbFallback: {
-    width: 40,
-    height: 40,
+    width: 'clamp(32px, 8vw, 40px)',
+    height: 'clamp(32px, 8vw, 40px)',
     borderRadius: 8,
     backgroundColor: COLORS.lightGray,
     flexShrink: 0,
   },
   itemInfo: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 },
   itemName: {
-    fontSize: 13.5,
+    fontSize: 'clamp(11px, 2vw, 13.5px)',
     fontWeight: 600,
     color: COLORS.textDark,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  itemQty: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 2 },
-  itemTotal: { fontSize: 13.5, fontWeight: 700, color: COLORS.textDark, flexShrink: 0 },
+  itemQty: { fontSize: 'clamp(10px, 1.5vw, 12.5px)', color: COLORS.textMuted, marginTop: 2 },
+  itemTotal: { fontSize: 'clamp(11px, 2vw, 13.5px)', fontWeight: 700, color: COLORS.textDark, flexShrink: 0 },
   select: {
     border: `1px solid ${COLORS.midGray}`,
     borderRadius: 10,
-    padding: '9px 12px',
-    fontSize: 13,
+    padding: 'clamp(8px, 1.5vw, 9px) clamp(10px, 2vw, 12px)',
+    fontSize: 'clamp(11px, 2vw, 13px)',
     fontWeight: 600,
     color: COLORS.textDark,
     backgroundColor: COLORS.lightGray,
     cursor: 'pointer',
     outline: 'none',
   },
-  cancelBtn: {
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: COLORS.textMuted,
-    fontSize: 13,
-    fontWeight: 600,
-    padding: '9px 10px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
   deleteBtn: {
     border: 'none',
     backgroundColor: 'transparent',
     color: COLORS.danger,
-    fontSize: 13,
+    fontSize: 'clamp(11px, 2vw, 13px)',
     fontWeight: 600,
-    padding: '9px 10px',
+    padding: 'clamp(8px, 1.5vw, 9px) clamp(8px, 2vw, 10px)',
     borderRadius: 10,
     cursor: 'pointer',
   },
   emptyState: {
     textAlign: 'center',
-    padding: '60px 20px',
+    padding: 'clamp(30px, 8vw, 60px) clamp(15px, 5vw, 20px)',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 'clamp(12px, 2vw, 14px)',
     border: `1px dashed ${COLORS.midGray}`,
+    width: '100%',
+    boxSizing: 'border-box',
   },
-  emptyTitle: { fontSize: 16, fontWeight: 700, color: COLORS.textDark, marginBottom: 6 },
-  emptyText: { fontSize: 14, color: COLORS.textMuted, margin: 0 },
+  emptyTitle: { fontSize: 'clamp(13px, 3vw, 16px)', fontWeight: 700, color: COLORS.textDark, marginBottom: 6 },
+  emptyText: { fontSize: 'clamp(11px, 2vw, 14px)', color: COLORS.textMuted, margin: 0 },
   skeletonCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 'clamp(12px, 2vw, 14px)',
     border: `1px solid ${COLORS.midGray}`,
-    padding: '18px 20px',
+    padding: 'clamp(12px, 2vw, 18px) clamp(14px, 3vw, 20px)',
   },
   skeletonBlock: {
     backgroundColor: COLORS.lightGray,
@@ -1211,36 +1365,59 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 'clamp(12px, 5vw, 20px)',
     zIndex: 50,
   },
   dialog: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: '24px',
-    maxWidth: 380,
+    padding: 'clamp(16px, 4vw, 24px)',
+    maxWidth: 'clamp(280px, 90vw, 380px)',
     width: '100%',
     boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+    boxSizing: 'border-box',
   },
-  dialogText: { fontSize: 14, color: COLORS.textDark, marginBottom: 20, lineHeight: 1.5 },
-  dialogActions: { display: 'flex', justifyContent: 'flex-end', gap: 10 },
+  dialogText: { fontSize: 'clamp(12px, 2vw, 14px)', color: COLORS.textDark, marginBottom: 20, lineHeight: 1.5 },
+  dialogActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' },
   dialogCancel: {
     border: `1px solid ${COLORS.midGray}`,
     backgroundColor: '#FFFFFF',
     color: COLORS.textDark,
     fontWeight: 600,
-    fontSize: 13,
-    padding: '9px 16px',
+    fontSize: 'clamp(11px, 2vw, 13px)',
+    padding: 'clamp(7px, 1vw, 9px) clamp(12px, 2vw, 16px)',
     borderRadius: 10,
     cursor: 'pointer',
+  },
+  printOrderBtn: {
+    border: '1px solid #128171',
+    backgroundColor: '#FFFFFF',
+    color: '#128171',
+    fontSize: 'clamp(11px, 2vw, 13px)',
+    fontWeight: 700,
+    padding: 'clamp(8px, 1.5vw, 9px) clamp(10px, 2vw, 12px)',
+    borderRadius: 10,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
+  printDeliveryBtn: {
+    border: '1px solid #5B57A6',
+    backgroundColor: '#FFFFFF',
+    color: '#5B57A6',
+    fontSize: 'clamp(11px, 2vw, 13px)',
+    fontWeight: 700,
+    padding: 'clamp(8px, 1.5vw, 9px) clamp(10px, 2vw, 12px)',
+    borderRadius: 10,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   dialogConfirm: {
     border: 'none',
     backgroundColor: COLORS.danger,
     color: '#FFFFFF',
     fontWeight: 600,
-    fontSize: 13,
-    padding: '9px 16px',
+    fontSize: 'clamp(11px, 2vw, 13px)',
+    padding: 'clamp(7px, 1vw, 9px) clamp(12px, 2vw, 16px)',
     borderRadius: 10,
     cursor: 'pointer',
   },
